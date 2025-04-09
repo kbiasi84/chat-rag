@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  maximumScale: 1, // Disable auto-zoom on mobile Safari
+  maximumScale: 1, // Disable auto-zoom on mobile Safariii
 };
 
 const geist = Geist({
