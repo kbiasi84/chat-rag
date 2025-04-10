@@ -1,7 +1,13 @@
 import Form from 'next/form';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select';
 import { useState } from 'react';
 
 export function FormularioRegistro({
@@ -20,17 +26,17 @@ export function FormularioRegistro({
   // Função para aplicar a máscara de telefone
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value;
-    
+
     // Remove todos os caracteres não numéricos
     value = value.replace(/\D/g, '');
-    
+
     // Aplica a máscara conforme o usuário digita
     if (value.length <= 11) {
       // Formato: (99) 99999-9999
       value = value.replace(/^(\d{2})(\d)/g, '($1) $2');
       value = value.replace(/(\d)(\d{4})$/, '$1-$2');
     }
-    
+
     setWhatsapp(value);
   };
 
@@ -45,8 +51,8 @@ export function FormularioRegistro({
         </Label>
 
         <Input
-          id="name"
-          name="name"
+          id="nome"
+          name="nome"
           className="bg-muted text-md md:text-sm"
           type="text"
           placeholder="Digite seu nome completo"
@@ -100,19 +106,21 @@ export function FormularioRegistro({
 
       <div className="flex flex-col gap-2">
         <Label
-          htmlFor="activity"
+          htmlFor="atividade"
           className="text-zinc-600 font-normal dark:text-zinc-400"
         >
           Atividade
         </Label>
 
-        <Select name="activity" required>
+        <Select name="atividade" required>
           <SelectTrigger className="bg-muted text-md md:text-sm">
             <SelectValue placeholder="Selecione sua atividade" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="professor">Professor</SelectItem>
-            <SelectItem value="dp">Profissional do Departamento Pessoal</SelectItem>
+            <SelectItem value="departamento Pessoal">
+              Departamento Pessoal
+            </SelectItem>
             <SelectItem value="estudante">Estudante</SelectItem>
             <SelectItem value="contador">Contador</SelectItem>
           </SelectContent>
@@ -121,17 +129,17 @@ export function FormularioRegistro({
 
       <div className="flex flex-col gap-2">
         <Label
-          htmlFor="password"
+          htmlFor="senha"
           className="text-zinc-600 font-normal dark:text-zinc-400"
         >
           Senha
         </Label>
 
         <Input
-          id="password"
-          name="password"
+          id="senha"
+          name="senha"
           className="bg-muted text-md md:text-sm"
-          type="password"
+          type="senha"
           required
         />
       </div>

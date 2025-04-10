@@ -11,13 +11,18 @@ import {
   boolean,
 } from 'drizzle-orm/pg-core';
 
-export const user = pgTable('User', {
+export const user = pgTable('user', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
-  email: varchar('email', { length: 64 }).notNull(),
-  password: varchar('password', { length: 64 }),
+  nome: varchar('nome', { length: 255 }), // novo campo
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  senha: varchar('senha', { length: 255 }), // alterado de "password" para "senha"
+  whatsapp: varchar('whatsapp', { length: 20 }), // novo campo
+  atividade: varchar('atividade', { length: 50 }), // novo campo
+  criadoEm: timestamp('criado_em').notNull().defaultNow(), // novo campo
+  atualizadoEm: timestamp('atualizado_em').notNull().defaultNow(), // novo campo
 });
 
-export type User = InferSelectModel<typeof user>;
+export type Usuario = InferSelectModel<typeof user>;
 
 export const chat = pgTable('Chat', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),

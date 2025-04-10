@@ -24,16 +24,22 @@ export default function Page() {
   );
 
   useEffect(() => {
+    console.log('Estado atual:', state); // 👈 mostra o objeto completo
+
     if (state.status === 'user_exists') {
+      console.log('Usuário já existe');
       toast({ type: 'error', description: 'Esta conta já existe!' });
     } else if (state.status === 'failed') {
+      console.log('Falha ao criar conta');
       toast({ type: 'error', description: 'Falha ao criar a conta!' });
     } else if (state.status === 'invalid_data') {
+      console.log('Dados inválidos');
       toast({
         type: 'error',
         description: 'Falha na validação dos dados enviados!',
       });
     } else if (state.status === 'success') {
+      console.log('Conta criada com sucesso');
       toast({ type: 'success', description: 'Conta criada com sucesso!' });
 
       setIsSuccessful(true);

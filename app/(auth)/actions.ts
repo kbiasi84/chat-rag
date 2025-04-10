@@ -7,8 +7,11 @@ import { createUser, getUser } from '@/lib/db/queries';
 import { signIn } from './auth';
 
 const authFormSchema = z.object({
+  nome: z.string().min(2),
   email: z.string().email(),
-  password: z.string().min(6),
+  whatsapp: z.string().min(14), // considerando máscara com (99) 99999-9999
+  atividade: z.string().min(2),
+  senha: z.string().min(6),
 });
 
 export interface LoginActionState {
@@ -22,12 +25,12 @@ export const login = async (
   try {
     const validatedData = authFormSchema.parse({
       email: formData.get('email'),
-      password: formData.get('password'),
+      senha: formData.get('senha'),
     });
 
     await signIn('credentials', {
       email: validatedData.email,
-      password: validatedData.password,
+      senha: validatedData.senha,
       redirect: false,
     });
 
@@ -57,8 +60,11 @@ export const register = async (
 ): Promise<RegisterActionState> => {
   try {
     const validatedData = authFormSchema.parse({
+      nome: formData.get('nome'),
       email: formData.get('email'),
-      password: formData.get('password'),
+      whatsapp: formData.get('whatsapp'),
+      atividade: formData.get('atividade'),
+      senha: formData.get('senha'),
     });
 
     const [user] = await getUser(validatedData.email);
@@ -66,15 +72,24 @@ export const register = async (
     if (user) {
       return { status: 'user_exists' } as RegisterActionState;
     }
-    await createUser(validatedData.email, validatedData.password);
+
+    await createUser(
+      validatedData.nome,
+      validatedData.email,
+      validatedData.whatsapp,
+      validatedData.atividade,
+      validatedData.senha,
+    );
+
     await signIn('credentials', {
       email: validatedData.email,
-      password: validatedData.password,
+      senha: validatedData.senha,
       redirect: false,
     });
 
     return { status: 'success' };
   } catch (error) {
+    console.error(error);
     if (error instanceof z.ZodError) {
       return { status: 'invalid_data' };
     }

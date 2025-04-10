@@ -59,3 +59,8 @@ pnpm dev
 ```
 
 Your app template should now be running on [localhost:3000](http://localhost:3000/).
+
+Para gerar alterações no banco de dados
+
+pnpm drizzle-kit generate
+pnpm db:migrate

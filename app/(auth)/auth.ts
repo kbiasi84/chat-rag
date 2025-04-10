@@ -20,11 +20,11 @@ export const {
   providers: [
     Credentials({
       credentials: {},
-      async authorize({ email, password }: any) {
+      async authorize({ email, senha }: any) {
         const users = await getUser(email);
         if (users.length === 0) return null;
         // biome-ignore lint: Forbidden non-null assertion.
-        const passwordsMatch = await compare(password, users[0].password!);
+        const passwordsMatch = await compare(senha, users[0].senha!);
         if (!passwordsMatch) return null;
         return users[0] as any;
       },

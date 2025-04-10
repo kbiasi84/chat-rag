@@ -39,15 +39,15 @@ export function AuthForm({
 
       <div className="flex flex-col gap-2">
         <Label
-          htmlFor="password"
+          htmlFor="senha"
           className="text-zinc-600 font-normal dark:text-zinc-400"
         >
           Senha
         </Label>
 
         <Input
-          id="password"
-          name="password"
+          id="senha"
+          name="senha"
           className="bg-muted text-md md:text-sm"
           type="password"
           required

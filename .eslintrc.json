@@ -10,7 +10,7 @@
   "rules": {
     "tailwindcss/no-custom-classname": "off",
     "tailwindcss/classnames-order": "off"
-    
+    //"import/no-unresolved": "true"
   },
   "settings": {
     "import/resolver": {
