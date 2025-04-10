@@ -13,24 +13,24 @@ interface SuggestedActionsProps {
 function PureSuggestedActions({ chatId, append }: SuggestedActionsProps) {
   const suggestedActions = [
     {
-      title: 'What are the advantages',
-      label: 'of using Next.js?',
-      action: 'What are the advantages of using Next.js?',
+      title: 'Quais são os direitos',
+      label: 'nas férias do colaborador?',
+      action: 'Quais são os direitos nas férias do colaborador?',
     },
     {
-      title: 'Write code to',
-      label: `demonstrate djikstra's algorithm`,
-      action: `Write code to demonstrate djikstra's algorithm`,
+      title: 'Como calcular',
+      label: 'rescisão por justa causa?',
+      action: 'Como calcular rescisão por justa causa?',
     },
     {
-      title: 'Help me write an essay',
-      label: `about silicon valley`,
-      action: `Help me write an essay about silicon valley`,
+      title: 'Explique o processo',
+      label: 'de admissão de funcionários',
+      action: 'Explique o processo de admissão de funcionários',
     },
     {
-      title: 'What is the weather',
-      label: 'in San Francisco?',
-      action: 'What is the weather in San Francisco?',
+      title: 'Quais são as obrigações',
+      label: 'do eSocial para empresas?',
+      action: 'Quais são as obrigações do eSocial para empresas?',
     },
   ];
 

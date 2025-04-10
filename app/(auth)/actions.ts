@@ -6,7 +6,14 @@ import { createUser, getUser } from '@/lib/db/queries';
 
 import { signIn } from './auth';
 
-const authFormSchema = z.object({
+// Schema separado para login
+const loginSchema = z.object({
+  email: z.string().email(),
+  senha: z.string().min(6),
+});
+
+// Schema completo para registro
+const registerSchema = z.object({
   nome: z.string().min(2),
   email: z.string().email(),
   whatsapp: z.string().min(14), // considerando máscara com (99) 99999-9999
@@ -23,7 +30,7 @@ export const login = async (
   formData: FormData,
 ): Promise<LoginActionState> => {
   try {
-    const validatedData = authFormSchema.parse({
+    const validatedData = loginSchema.parse({
       email: formData.get('email'),
       senha: formData.get('senha'),
     });
@@ -36,6 +43,7 @@ export const login = async (
 
     return { status: 'success' };
   } catch (error) {
+    console.error('Erro no login:', error);
     if (error instanceof z.ZodError) {
       return { status: 'invalid_data' };
     }
@@ -59,7 +67,7 @@ export const register = async (
   formData: FormData,
 ): Promise<RegisterActionState> => {
   try {
-    const validatedData = authFormSchema.parse({
+    const validatedData = registerSchema.parse({
       nome: formData.get('nome'),
       email: formData.get('email'),
       whatsapp: formData.get('whatsapp'),
@@ -70,7 +78,7 @@ export const register = async (
     const [user] = await getUser(validatedData.email);
 
     if (user) {
-      return { status: 'user_exists' } as RegisterActionState;
+      return { status: 'user_exists' };
     }
 
     await createUser(
@@ -81,16 +89,23 @@ export const register = async (
       validatedData.senha,
     );
 
-    await signIn('credentials', {
-      email: validatedData.email,
-      senha: validatedData.senha,
-      redirect: false,
-    });
+    try {
+      await signIn('credentials', {
+        email: validatedData.email,
+        senha: validatedData.senha,
+        redirect: false,
+      });
 
-    return { status: 'success' };
+      return { status: 'success' };
+    } catch (signInError) {
+      console.error('Erro ao fazer login após registro:', signInError);
+      // Mesmo com erro no signIn, retornamos sucesso pois o usuário foi criado
+      return { status: 'success' };
+    }
   } catch (error) {
-    console.error(error);
+    console.error('Erro no registro:', error);
     if (error instanceof z.ZodError) {
+      console.error('Erros de validação:', error.errors);
       return { status: 'invalid_data' };
     }
 

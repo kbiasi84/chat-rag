@@ -26,7 +26,7 @@ export function SidebarToggle({
           <SidebarLeftIcon size={16} />
         </Button>
       </TooltipTrigger>
-      <TooltipContent align="start">Toggle Sidebar</TooltipContent>
+      <TooltipContent align="start">Alternar barra lateral</TooltipContent>
     </Tooltip>
   );
 }

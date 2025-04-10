@@ -10,17 +10,17 @@ import {
 } from './ui/select';
 import { useState } from 'react';
 
+type FormularioRegistroProps = {
+  action: NonNullable<string | ((formData: FormData) => void | Promise<void>)>;
+  children: React.ReactNode;
+  defaultEmail?: string;
+};
+
 export function FormularioRegistro({
   action,
   children,
   defaultEmail = '',
-}: {
-  action: NonNullable<
-    string | ((formData: FormData) => void | Promise<void>) | undefined
-  >;
-  children: React.ReactNode;
-  defaultEmail?: string;
-}) {
+}: FormularioRegistroProps) {
   const [whatsapp, setWhatsapp] = useState('');
 
   // Função para aplicar a máscara de telefone
@@ -44,7 +44,7 @@ export function FormularioRegistro({
     <Form action={action} className="flex flex-col gap-4 px-4 sm:px-16">
       <div className="flex flex-col gap-2">
         <Label
-          htmlFor="name"
+          htmlFor="nome"
           className="text-zinc-600 font-normal dark:text-zinc-400"
         >
           Nome completo
@@ -139,7 +139,7 @@ export function FormularioRegistro({
           id="senha"
           name="senha"
           className="bg-muted text-md md:text-sm"
-          type="senha"
+          type="password"
           required
         />
       </div>

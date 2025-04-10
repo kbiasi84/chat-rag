@@ -22,7 +22,7 @@ export const user = pgTable('user', {
   atualizadoEm: timestamp('atualizado_em').notNull().defaultNow(), // novo campo
 });
 
-export type Usuario = InferSelectModel<typeof user>;
+export type User = InferSelectModel<typeof user>;
 
 export const chat = pgTable('Chat', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),

@@ -64,3 +64,8 @@ Para gerar alterações no banco de dados
 
 pnpm drizzle-kit generate
 pnpm db:migrate
+
+Enviar para github
+git add .
+git commit -m "mensagem explicando o que foi alterado"
+git push
