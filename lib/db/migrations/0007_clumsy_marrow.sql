@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "perfil" varchar(20) DEFAULT 'usuario' NOT NULL;

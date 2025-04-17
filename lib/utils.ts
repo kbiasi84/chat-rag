@@ -9,6 +9,7 @@ import type {
 } from 'ai';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { customAlphabet } from 'nanoid';
 
 import type { DBMessage, Document } from '@/lib/db/schema';
 
@@ -45,12 +46,10 @@ export function getLocalStorage(key: string) {
   return [];
 }
 
-export function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+export const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789');
+
+export function generateUUID() {
+  return crypto.randomUUID();
 }
 
 function addToolMessageToChat({

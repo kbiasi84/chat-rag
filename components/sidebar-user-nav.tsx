@@ -4,6 +4,8 @@ import Image from 'next/image';
 import type { User } from 'next-auth';
 import { signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 import {
   DropdownMenu,
@@ -20,6 +22,13 @@ import {
 
 export function SidebarUserNav({ user }: { user: User }) {
   const { setTheme, theme } = useTheme();
+  const router = useRouter();
+
+  // Log temporário para verificar os dados disponíveis
+  console.log('SidebarUserNav - user object:', JSON.stringify(user, null, 2));
+
+  // Verificar se o usuário é admin
+  const isAdmin = (user as any)?.perfil === 'admin';
 
   return (
     <SidebarMenu>
@@ -29,12 +38,15 @@ export function SidebarUserNav({ user }: { user: User }) {
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent bg-background data-[state=open]:text-sidebar-accent-foreground h-10">
               <Image
                 src={`https://avatar.vercel.sh/${user.email}`}
-                alt={user.email ?? 'User Avatar'}
+                alt={(user as any)?.nome ?? user.email ?? 'User Avatar'}
                 width={24}
                 height={24}
                 className="rounded-full"
               />
-              <span className="truncate">{user?.email}</span>
+              {/* Exibir nome ao invés do email */}
+              <span className="truncate">
+                {(user as any)?.nome || user.email}
+              </span>
               <ChevronUp className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
@@ -46,9 +58,34 @@ export function SidebarUserNav({ user }: { user: User }) {
               className="cursor-pointer"
               onSelect={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              {`Toggle ${theme === 'light' ? 'dark' : 'light'} mode`}
+              {`Alterar para cor ${theme === 'light' ? 'Escura' : 'Clara'}`}
             </DropdownMenuItem>
+
             <DropdownMenuSeparator />
+
+            <DropdownMenuItem asChild>
+              <Link href="/planos" className="w-full cursor-pointer">
+                Meu Plano
+              </Link>
+            </DropdownMenuItem>
+
+            {/* Menu de Administrador - apenas para admins */}
+            {isAdmin && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/admin/base-conhecimento"
+                    className="w-full cursor-pointer"
+                  >
+                    Administrador
+                  </Link>
+                </DropdownMenuItem>
+              </>
+            )}
+
+            <DropdownMenuSeparator />
+
             <DropdownMenuItem asChild>
               <button
                 type="button"
