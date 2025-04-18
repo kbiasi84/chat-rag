@@ -1,4 +1,4 @@
-export const DEFAULT_CHAT_MODEL: string = "chat-dp";
+export const DEFAULT_CHAT_MODEL: string = 'chat-dp';
 
 interface ChatModel {
   id: string;
@@ -9,8 +9,8 @@ interface ChatModel {
 export const chatModels: Array<ChatModel> = [
   {
     id: 'chat-dp',
-    name: 'Chat DP',
-    description: 'Chat para o Departamento Pessoal',
+    name: 'Consultor de Departamento Pessoal',
+    description: 'Especialista em questões trabalhistas e recursos humanos',
   },
   /*{
     id: 'chat-model-reasoning',

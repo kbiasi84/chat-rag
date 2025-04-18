@@ -45,7 +45,7 @@ export const createLink = async (input: NewLinkParams) => {
     // Processa o conteúdo da URL imediatamente
     console.log('Processando conteúdo do link...');
     const processingResult = await processLinkContent(link.id);
-    console.log('Resultado do processamento:', processingResult);
+    //console.log('Resultado do processamento:', processingResult);
 
     return 'Link adicionado com sucesso e conteúdo processado.';
   } catch (error) {

@@ -121,44 +121,71 @@ export const generateEmbedding = async (value: string): Promise<number[]> => {
 
 export const findRelevantContent = async (userQuery: string) => {
   try {
-    console.log(`Buscando conteúdo relevante para: "${userQuery}"`);
+    console.log(`[EMBEDDING] Buscando conteúdo relevante para: "${userQuery}"`);
 
     // Normalizar a consulta do usuário
     const normalizedQuery = userQuery.toLowerCase().trim();
-    console.log(`Consulta normalizada: "${normalizedQuery}"`);
+    console.log(`[EMBEDDING] Consulta normalizada: "${normalizedQuery}"`);
 
-    // Gerar embedding para a consulta
-    const userQueryEmbedded = await generateEmbedding(normalizedQuery);
-    console.log(`Embedding gerado para a consulta`);
-
-    // Calcular similaridade usando distância de cosseno
-    const similarity = sql<number>`1 - (${cosineDistance(embeddings.embedding, userQueryEmbedded)})`;
-
-    // Threshold de similaridade reduzido para capturar mais resultados potencialmente relevantes
-    const similarityThreshold = 0.2;
-
-    // Buscar fragmentos relevantes
-    const similarContent = await db
-      .select({
-        content: embeddings.content,
-        similarity,
-        resourceId: embeddings.resourceId,
-      })
-      .from(embeddings)
-      .where(gt(similarity, similarityThreshold))
-      .orderBy((t) => desc(t.similarity))
-      .limit(8); // Aumentando o limite para obter mais contexto
-
-    console.log(`Encontrados ${similarContent.length} fragmentos relevantes`);
-    similarContent.forEach((item, index) => {
+    try {
+      // Gerar embedding para a consulta
+      console.log('[EMBEDDING] Gerando embedding para a consulta...');
+      const userQueryEmbedded = await generateEmbedding(normalizedQuery);
       console.log(
-        `Fragmento #${index + 1} - Similaridade: ${item.similarity.toFixed(4)}`,
+        `[EMBEDDING] Embedding gerado com sucesso. Tamanho: ${userQueryEmbedded.length}`,
       );
-    });
 
-    return similarContent;
-  } catch (error) {
-    console.error('Erro ao buscar conteúdo relevante:', error);
+      // Calcular similaridade usando distância de cosseno
+      console.log('[EMBEDDING] Calculando similaridade com vetores na base...');
+      const similarity = sql<number>`1 - (${cosineDistance(embeddings.embedding, userQueryEmbedded)})`;
+
+      // Threshold de similaridade reduzido para capturar mais resultados potencialmente relevantes
+      const similarityThreshold = 0.2;
+      console.log(
+        `[EMBEDDING] Usando threshold de similaridade: ${similarityThreshold}`,
+      );
+
+      // Buscar fragmentos relevantes
+      console.log('[EMBEDDING] Executando consulta ao banco de dados...');
+      const similarContent = await db
+        .select({
+          content: embeddings.content,
+          similarity,
+          resourceId: embeddings.resourceId,
+        })
+        .from(embeddings)
+        .where(gt(similarity, similarityThreshold))
+        .orderBy((t) => desc(t.similarity))
+        .limit(8); // Aumentando o limite para obter mais contexto
+
+      console.log(
+        `[EMBEDDING] Encontrados ${similarContent.length} fragmentos relevantes`,
+      );
+
+      // Log detalhado de cada resultado encontrado
+      similarContent.forEach((item, index) => {
+        console.log(
+          `[EMBEDDING] Fragmento #${index + 1} - Similaridade: ${item.similarity.toFixed(4)} - ResourceID: ${item.resourceId}`,
+        );
+        console.log(
+          `[EMBEDDING] Primeiros 100 caracteres: ${item.content.substring(0, 100)}...`,
+        );
+      });
+
+      return similarContent;
+    } catch (embeddingError: unknown) {
+      console.error(
+        '[EMBEDDING] Erro ao gerar embedding ou consultar base:',
+        embeddingError,
+      );
+      console.error(
+        (embeddingError as Error)?.stack || 'Sem stack trace disponível',
+      );
+      throw embeddingError;
+    }
+  } catch (error: unknown) {
+    console.error('[EMBEDDING] Erro ao buscar conteúdo relevante:', error);
+    console.error((error as Error)?.stack || 'Sem stack trace disponível');
     return [];
   }
 };

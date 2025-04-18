@@ -1,9 +1,9 @@
 import {
-  UIMessage,
   appendResponseMessages,
   createDataStreamResponse,
   smoothStream,
   streamText,
+  type UIMessage,
 } from 'ai';
 import { auth } from '@/app/(auth)/auth';
 import { systemPrompt } from '@/lib/ai/prompts';
@@ -23,13 +23,35 @@ import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
+import {
+  getKnowledgeInfo,
+  analyzeQuery,
+  addToKnowledgeBase,
+} from '@/lib/ai/tools/query-knowledge-base';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 
 export const maxDuration = 60;
 
+// Prompt específico para a base de conhecimento
+const knowledgeBasePrompt = `
+Você é um assistente inteligente com acesso a uma base de conhecimento. 
+Para cada pergunta do usuário, você deve:
+
+1. SEMPRE use a ferramenta 'analyzeQuery' para extrair palavras-chave relevantes da pergunta do usuário.
+2. Em seguida, use a ferramenta 'getKnowledgeInfo' para consultar a base de conhecimento com a pergunta e as palavras-chave.
+3. Responda com base nas informações encontradas na base de conhecimento.
+4. Quando apropriado, use a ferramenta 'addToKnowledgeBase' para armazenar informações importantes fornecidas pelo usuário.
+
+Se a base de conhecimento não contiver informações relevantes, informe o usuário e ofereça ajuda alternativa ou pergunte se ele deseja adicionar conteúdo à base.
+
+Seja conciso, preciso e claro em suas respostas.
+`;
+
 export async function POST(request: Request) {
   try {
+    console.log('Iniciando processamento da requisição de chat');
+
     const {
       id,
       messages,
@@ -40,125 +62,179 @@ export async function POST(request: Request) {
       selectedChatModel: string;
     } = await request.json();
 
+    console.log(`Chat ID: ${id}, Modelo selecionado: ${selectedChatModel}`);
+    console.log(`Número de mensagens: ${messages.length}`);
+
     const session = await auth();
 
     if (!session || !session.user || !session.user.id) {
+      console.error(
+        'Erro de autenticação: sessão inválida ou usuário não autenticado',
+      );
       return new Response('Unauthorized', { status: 401 });
     }
+
+    console.log(`Usuário autenticado: ${session.user.id}`);
 
     const userMessage = getMostRecentUserMessage(messages);
 
     if (!userMessage) {
+      console.error('Erro: Nenhuma mensagem do usuário encontrada');
       return new Response('No user message found', { status: 400 });
     }
 
+    console.log(
+      `Última mensagem do usuário: ${JSON.stringify(userMessage.parts)}`,
+    );
+
     const chat = await getChatById({ id });
 
-    if (!chat) {
-      const title = await generateTitleFromUserMessage({
-        message: userMessage,
-      });
+    try {
+      if (!chat) {
+        console.log('Criando novo chat...');
+        const title = await generateTitleFromUserMessage({
+          message: userMessage,
+        });
 
-      await saveChat({ id, userId: session.user.id, title });
-    } else {
-      if (chat.userId !== session.user.id) {
-        return new Response('Unauthorized', { status: 401 });
+        console.log(`Título gerado para o chat: ${title}`);
+        await saveChat({ id, userId: session.user.id, title });
+      } else {
+        console.log(`Chat existente encontrado: ${chat.id}`);
+        if (chat.userId !== session.user.id) {
+          console.error(
+            `Erro de autorização: usuário ${session.user.id} tentando acessar chat de ${chat.userId}`,
+          );
+          return new Response('Unauthorized', { status: 401 });
+        }
       }
+
+      console.log('Salvando mensagem do usuário...');
+      await saveMessages({
+        messages: [
+          {
+            chatId: id,
+            id: userMessage.id,
+            role: 'user',
+            parts: userMessage.parts,
+            attachments: userMessage.experimental_attachments ?? [],
+            createdAt: new Date(),
+          },
+        ],
+      });
+      console.log('Mensagem do usuário salva com sucesso');
+    } catch (dbError) {
+      console.error('Erro ao interagir com o banco de dados:', dbError);
+      throw dbError;
     }
 
-    await saveMessages({
-      messages: [
-        {
-          chatId: id,
-          id: userMessage.id,
-          role: 'user',
-          parts: userMessage.parts,
-          attachments: userMessage.experimental_attachments ?? [],
-          createdAt: new Date(),
-        },
-      ],
-    });
-
+    console.log('Iniciando stream de resposta...');
     return createDataStreamResponse({
       execute: (dataStream) => {
-        const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel }),
-          messages,
-          maxSteps: 5,
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                ],
-          experimental_transform: smoothStream({ chunking: 'word' }),
-          experimental_generateMessageId: generateUUID,
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-            }),
-          },
-          onFinish: async ({ response }) => {
-            if (session.user?.id) {
-              try {
-                const assistantId = getTrailingMessageId({
-                  messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  ),
-                });
+        try {
+          console.log('Executando stream de resposta...');
 
-                if (!assistantId) {
-                  throw new Error('No assistant message found!');
-                }
+          // Combinando o prompt do sistema com o prompt da base de conhecimento
+          const combinedPrompt = `${systemPrompt({ selectedChatModel })}\n\n${knowledgeBasePrompt}`;
+          console.log('Prompt combinado criado');
 
-                const [, assistantMessage] = appendResponseMessages({
-                  messages: [userMessage],
-                  responseMessages: response.messages,
-                });
-
-                await saveMessages({
-                  messages: [
-                    {
-                      id: assistantId,
-                      chatId: id,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      attachments:
-                        assistantMessage.experimental_attachments ?? [],
-                      createdAt: new Date(),
-                    },
+          const result = streamText({
+            model: myProvider.languageModel(selectedChatModel),
+            system: combinedPrompt,
+            messages,
+            maxSteps: 5,
+            experimental_activeTools:
+              selectedChatModel === 'chat-model-reasoning'
+                ? []
+                : [
+                    'getWeather',
+                    'createDocument',
+                    'updateDocument',
+                    'requestSuggestions',
+                    'analyzeQuery',
+                    'getKnowledgeInfo',
+                    'addToKnowledgeBase',
                   ],
-                });
-              } catch (_) {
-                console.error('Failed to save chat');
+            experimental_transform: smoothStream({ chunking: 'word' }),
+            experimental_generateMessageId: generateUUID,
+            tools: {
+              getWeather,
+              createDocument: createDocument({ session, dataStream }),
+              updateDocument: updateDocument({ session, dataStream }),
+              requestSuggestions: requestSuggestions({
+                session,
+                dataStream,
+              }),
+              analyzeQuery,
+              getKnowledgeInfo,
+              addToKnowledgeBase,
+            },
+            onFinish: async ({ response }) => {
+              console.log('Resposta do modelo completa');
+              if (session.user?.id) {
+                try {
+                  const assistantId = getTrailingMessageId({
+                    messages: response.messages.filter(
+                      (message) => message.role === 'assistant',
+                    ),
+                  });
+
+                  if (!assistantId) {
+                    console.error(
+                      'Erro: Nenhuma mensagem do assistente encontrada na resposta',
+                    );
+                    throw new Error('No assistant message found!');
+                  }
+
+                  const [, assistantMessage] = appendResponseMessages({
+                    messages: [userMessage],
+                    responseMessages: response.messages,
+                  });
+
+                  console.log('Salvando mensagem do assistente...');
+                  await saveMessages({
+                    messages: [
+                      {
+                        id: assistantId,
+                        chatId: id,
+                        role: assistantMessage.role,
+                        parts: assistantMessage.parts,
+                        attachments:
+                          assistantMessage.experimental_attachments ?? [],
+                        createdAt: new Date(),
+                      },
+                    ],
+                  });
+                  console.log('Mensagem do assistente salva com sucesso');
+                } catch (saveError) {
+                  console.error('Falha ao salvar o chat:', saveError);
+                }
               }
-            }
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
-          },
-        });
+            },
+            experimental_telemetry: {
+              isEnabled: isProductionEnvironment,
+              functionId: 'stream-text',
+            },
+          });
 
-        result.consumeStream();
+          console.log('Stream de texto iniciado');
+          result.consumeStream();
 
-        result.mergeIntoDataStream(dataStream, {
-          sendReasoning: true,
-        });
+          console.log('Mesclando no DataStream');
+          result.mergeIntoDataStream(dataStream, {
+            sendReasoning: true,
+          });
+        } catch (streamError) {
+          console.error('Erro durante o streaming da resposta:', streamError);
+          throw streamError;
+        }
       },
-      onError: () => {
+      onError: (error) => {
+        console.error('Erro no DataStream:', error);
         return 'Oops, an error occured!';
       },
     });
   } catch (error) {
+    console.error('Erro geral na rota de API do chat:', error);
     return new Response('An error occurred while processing your request!', {
       status: 404,
     });

@@ -14,12 +14,12 @@ import { sql } from 'drizzle-orm';
 export const createResource = async (input: NewResourceParams) => {
   try {
     console.log('Iniciando criação do recurso...');
-    console.log('Input recebido:', JSON.stringify(input));
+    //console.log('Input recebido:', JSON.stringify(input));
 
     try {
       // Usar o schema com sourceId opcional
       const parsed = insertResourceSchemaWithOptionalSourceId.parse(input);
-      console.log('Schema validado com sucesso:', JSON.stringify(parsed));
+      //console.log('Schema validado com sucesso:', JSON.stringify(parsed));
 
       const { content, sourceType = SourceType.TEXT, sourceId } = parsed;
       console.log(`Tamanho do conteúdo: ${content.length} caracteres`);
