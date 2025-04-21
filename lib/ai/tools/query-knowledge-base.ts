@@ -7,6 +7,35 @@ import { openai } from '@ai-sdk/openai';
 import { generateObject } from 'ai';
 
 /**
+ * Extrai possíveis referências a artigos de leis e documentos jurídicos do conteúdo
+ */
+function extractLegalReferences(content: string): string[] {
+  // Padrões comuns de referências legais
+  const patterns = [
+    /art(?:igo)?\s*\.?\s*(\d+[^\.]*)(?:[^\d\n]*(?:da|do)\s+([^\n\.,;]+))?/gi,
+    /(?:lei|decreto|portaria|súmula|instrução normativa)\s+(?:n[°\.]?\s*)?([^\n\.,;]+)/gi,
+    /(?:CLT|Consolidação das Leis do Trabalho|Constituição Federal|CF)[\s\.,](?:[^\n]*art(?:igo)?\s*\.?\s*(\d+[^\.]*))?/gi,
+  ];
+
+  const references: string[] = [];
+
+  // Extrair correspondências de cada padrão
+  patterns.forEach((pattern) => {
+    let match;
+    // Usar while separado da atribuição para evitar advertência do linter
+    while ((match = pattern.exec(content)) !== null) {
+      if (match[0] && match[0].trim().length > 3) {
+        // Evitar matches muito curtos
+        references.push(match[0].trim());
+      }
+    }
+  });
+
+  // Remover duplicatas
+  return [...new Set(references)];
+}
+
+/**
  * Ferramenta para consultar informações na base de conhecimento
  */
 export const getKnowledgeInfo = tool({
@@ -67,6 +96,16 @@ export const getKnowledgeInfo = tool({
         `Após remoção de duplicatas: ${finalResults.length} resultados únicos`,
       );
 
+      // Extrair referências legais de todos os resultados
+      const allLegalReferences: string[] = [];
+      finalResults.forEach((item) => {
+        if (item?.content) {
+          const references = extractLegalReferences(item.content);
+          allLegalReferences.push(...references);
+        }
+      });
+      console.log(`Extraídas ${allLegalReferences.length} referências legais`);
+
       // Ordena por similaridade (maior para menor)
       finalResults.sort((a, b) => {
         const simA = a?.similarity ?? 0;
@@ -91,20 +130,43 @@ export const getKnowledgeInfo = tool({
         .slice(0, 8)
         .map((item, index) => {
           const similarity = item?.similarity ?? 0;
+          const references = extractLegalReferences(item.content);
+          const referencesText =
+            references.length > 0
+              ? `\nReferências Legais Identificadas: ${references.join(', ')}`
+              : '';
+
           return `
 ---
 Trecho #${index + 1} (Relevância: ${(similarity * 100).toFixed(2)}%)
+Fonte: ${item.resourceId || 'Não especificada'}${referencesText}
+Conteúdo:
 ${item.content}
-`;
+---`;
         })
         .join('\n');
+
+      // Formatação das referências legais encontradas
+      const uniqueLegalReferences = [...new Set(allLegalReferences)];
+      const legalReferencesText =
+        uniqueLegalReferences.length > 0
+          ? `\n\nReferências Legais Identificadas:\n${uniqueLegalReferences.join('\n')}`
+          : '';
 
       console.log(
         `Retornando ${finalResults.slice(0, 8).length} fragmentos formatados`,
       );
       console.log('--------- FIM DA CONSULTA ---------');
 
-      return `Informações relevantes encontradas na base de conhecimento:\n${formattedResults}`;
+      // Retornar os resultados em um formato que indique claramente ao modelo
+      // que não deve exibir os dados brutos, mas usá-los para formular a resposta
+      return `<resultados_internos>
+<contexto>
+${formattedResults}${legalReferencesText}
+</contexto>
+</resultados_internos>
+
+Utilize os resultados internos acima para formular sua resposta. Cite os artigos e referências legais relevantes, mas NÃO exiba os trechos ou resultados brutos.`;
     } catch (error) {
       console.error('ERRO NA CONSULTA À BASE DE CONHECIMENTO:', error);
       console.error(error.stack || 'Sem stack trace');
@@ -144,18 +206,24 @@ export const analyzeQuery = tool({
       );
       console.log('--------- FIM DA ANÁLISE ---------');
 
-      return {
-        query,
-        keywords: object.keywords || [],
-      };
+      // Retornar em formato de texto em vez de JSON
+      return `<analise_interna>
+<consulta>${query}</consulta>
+<palavras_chave>${object.keywords?.join(', ') || 'nenhuma'}</palavras_chave>
+</analise_interna>
+
+Utilize estas palavras-chave para sua consulta à base de conhecimento.`;
     } catch (error) {
       console.error('ERRO NA ANÁLISE DE CONSULTA:', error);
       console.error(error.stack || 'Sem stack trace');
       // Em caso de erro, retornamos a consulta original sem palavras-chave
-      return {
-        query,
-        keywords: [],
-      };
+      return `<analise_interna>
+<consulta>${query}</consulta>
+<palavras_chave>nenhuma</palavras_chave>
+<erro>Ocorreu um erro na análise</erro>
+</analise_interna>
+
+Continue com a consulta usando apenas os termos originais.`;
     }
   },
 });

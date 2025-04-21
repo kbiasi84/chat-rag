@@ -4,6 +4,53 @@ import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CodeBlock } from './code-block';
 
+// Função para limpar textos de debug e metadados
+const cleanMarkdownText = (text: string): string => {
+  if (!text) return '';
+
+  // Remover objeto JSON no início (como `{"query": "texto", "keywords": []}`)
+  let cleaned = text.replace(/^\s*{[\s\S]*?}\s*/m, '');
+
+  // Remover texto inicial de "Informações relevantes encontradas na base"
+  cleaned = cleaned.replace(
+    /^"?(?:<!--)?[\s\n]*Informações relevantes encontradas na base de conhecimento[\s\S]*?(?:-->)?[\s\n]*/m,
+    '',
+  );
+
+  // Remover outros comentários HTML
+  cleaned = cleaned.replace(/<!--[\s\S]*?-->/gm, '');
+
+  // Remover textos de instrução como "Lembre-se de citar os artigos"
+  cleaned = cleaned.replace(
+    /\n\nLembre-se de citar(?:[\s\S]*?)sua resposta\.?$/m,
+    '',
+  );
+
+  // Remover os blocos de trechos completos com formato de cabeçalho e conteúdo
+  cleaned = cleaned.replace(/---\nTrecho #\d+[\s\S]*?---\n/g, '');
+
+  // Remover seções de referências legais identificadas
+  cleaned = cleaned.replace(
+    /\n\nReferências Legais Identificadas[\s\S]*?(?:\n\n|$)/m,
+    '',
+  );
+
+  // Se o texto começar com aspas, remove-as
+  cleaned = cleaned.replace(/^"/, '');
+  cleaned = cleaned.replace(/"$/, '');
+
+  // Se após a limpeza, o texto começar com "---" (possível início de um trecho), remova até o próximo "---"
+  if (cleaned.startsWith('---')) {
+    const restAfterFirstSection = cleaned.split('---').slice(2).join('---');
+    cleaned = restAfterFirstSection.trim();
+  }
+
+  // Remover múltiplas linhas em branco
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+  return cleaned.trim();
+};
+
 const components: Partial<Components> = {
   // @ts-expect-error
   code: CodeBlock,
@@ -96,9 +143,12 @@ const components: Partial<Components> = {
 const remarkPlugins = [remarkGfm];
 
 const NonMemoizedMarkdown = ({ children }: { children: string }) => {
+  // Limpar o texto antes de renderizar
+  const cleanedText = cleanMarkdownText(children);
+
   return (
     <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
-      {children}
+      {cleanedText}
     </ReactMarkdown>
   );
 };

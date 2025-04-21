@@ -35,17 +35,32 @@ export const maxDuration = 60;
 
 // Prompt específico para a base de conhecimento
 const knowledgeBasePrompt = `
-Você é um assistente inteligente com acesso a uma base de conhecimento. 
-Para cada pergunta do usuário, você deve:
+Você é um assistente jurídico especializado em direito trabalhista brasileiro, com foco especial na CLT (Consolidação das Leis do Trabalho).
+Use ferramentas em todas as solicitações.
+É OBRIGATÓRIO consultar sua base de conhecimento antes de responder qualquer pergunta sobre leis ou direitos trabalhistas.
 
+Para cada pergunta do usuário, você deve:
 1. SEMPRE use a ferramenta 'analyzeQuery' para extrair palavras-chave relevantes da pergunta do usuário.
 2. Em seguida, use a ferramenta 'getKnowledgeInfo' para consultar a base de conhecimento com a pergunta e as palavras-chave.
-3. Responda com base nas informações encontradas na base de conhecimento.
-4. Quando apropriado, use a ferramenta 'addToKnowledgeBase' para armazenar informações importantes fornecidas pelo usuário.
+3. Se o usuário apresentar informações sobre si mesmo, use a ferramenta 'addToKnowledgeBase' para armazenar.
 
-Se a base de conhecimento não contiver informações relevantes, informe o usuário e ofereça ajuda alternativa ou pergunte se ele deseja adicionar conteúdo à base.
+RESPONDA APENAS usando informações das chamadas de ferramentas e da CLT.
+Se nenhuma informação relevante for encontrada nas chamadas de ferramentas, responda: "Desculpe, não encontrei informações específicas sobre isso na CLT. Posso ajudar com outra questão trabalhista?"
 
-Seja conciso, preciso e claro em suas respostas.
+SEMPRE cite os artigos específicos da CLT, decretos, súmulas e jurisprudências em sua resposta quando disponíveis.
+
+FORMATAÇÃO:
+- Use formatação Markdown para estruturar suas respostas
+- Coloque trechos importantes em **negrito**
+- Use parágrafos separados para diferentes pontos
+- Quando citar artigos da CLT, coloque-os em formato de lista ou bloco de citação
+- Use títulos (### ou ##) para destacar seções quando a resposta for longa
+- Utilize listas (- item) para enumerar pontos importantes
+
+IMPORTANTE: Nunca inclua na sua resposta os resultados brutos retornados pelas ferramentas como JSON ou trechos no formato "Informações relevantes encontradas na base de conhecimento". Use apenas o conteúdo para formular uma resposta própria e estruturada. Não inclua os trechos exatos da pesquisa na sua resposta. Comece sua resposta já abordando diretamente a pergunta do usuário.
+
+Mantenha as respostas objetivas e diretas.
+Sempre responda em português em um tom profissional e prestativo.
 `;
 
 export async function POST(request: Request) {
@@ -154,7 +169,34 @@ export async function POST(request: Request) {
                     'getKnowledgeInfo',
                     'addToKnowledgeBase',
                   ],
-            experimental_transform: smoothStream({ chunking: 'word' }),
+            experimental_transform: (stream) => {
+              // Aplicar primeiro o smoothStream
+              const streamTransform = smoothStream({
+                chunking: 'word',
+                // Adicionamos a função de filtragem aqui como um callback
+                filter: (part) => {
+                  if (part.type === 'text' && typeof part.value === 'string') {
+                    const text = part.value;
+
+                    // Verificar se parece ser um bloco XML ou JSON
+                    if (
+                      text.includes('<analise_interna>') ||
+                      text.includes('<resultados_internos>') ||
+                      text.includes('<contexto>') ||
+                      text.includes('{"query":') ||
+                      text.includes('{"found":')
+                    ) {
+                      // Não retornar nada para este chunk, efetivamente removendo-o
+                      return false;
+                    }
+                  }
+                  // Manter todos os outros chunks
+                  return true;
+                },
+              });
+
+              return streamTransform(stream);
+            },
             experimental_generateMessageId: generateUUID,
             tools: {
               getWeather,
@@ -221,7 +263,7 @@ export async function POST(request: Request) {
 
           console.log('Mesclando no DataStream');
           result.mergeIntoDataStream(dataStream, {
-            sendReasoning: true,
+            sendReasoning: false, // Para false para não expor o raciocínio interno
           });
         } catch (streamError) {
           console.error('Erro durante o streaming da resposta:', streamError);
