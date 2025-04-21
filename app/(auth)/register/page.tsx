@@ -27,11 +27,16 @@ export default function Page() {
     if (state.status === 'user_exists') {
       toast({ type: 'error', description: 'Esta conta já existe!' });
     } else if (state.status === 'failed') {
-      toast({ type: 'error', description: 'Falha ao criar a conta!' });
+      toast({
+        type: 'error',
+        description:
+          'Falha ao criar a conta. Por favor, verifique suas informações e tente novamente.',
+      });
     } else if (state.status === 'invalid_data') {
       toast({
         type: 'error',
-        description: 'Falha na validação dos dados enviados!',
+        description:
+          'Preencha todos os campos corretamente. A senha deve ter pelo menos 6 caracteres.',
       });
     } else if (state.status === 'success') {
       toast({ type: 'success', description: 'Conta criada com sucesso!' });

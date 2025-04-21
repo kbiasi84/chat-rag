@@ -14,11 +14,15 @@ const loginSchema = z.object({
 
 // Schema completo para registro
 const registerSchema = z.object({
-  nome: z.string().min(2),
-  email: z.string().email(),
-  whatsapp: z.string().min(14), // considerando máscara com (99) 99999-9999
-  atividade: z.string().min(2),
-  senha: z.string().min(6),
+  nome: z.string().min(2, { message: 'Nome deve ter pelo menos 2 caracteres' }),
+  email: z.string().email({ message: 'Email inválido' }),
+  whatsapp: z
+    .string()
+    .min(14, { message: 'WhatsApp deve estar no formato (99) 99999-9999' }),
+  atividade: z.string().min(2, { message: 'Atividade é obrigatória' }),
+  senha: z
+    .string()
+    .min(6, { message: 'Senha deve ter pelo menos 6 caracteres' }),
 });
 
 export interface LoginActionState {
@@ -81,26 +85,31 @@ export const register = async (
       return { status: 'user_exists' };
     }
 
-    await createUser(
-      validatedData.nome,
-      validatedData.email,
-      validatedData.whatsapp,
-      validatedData.atividade,
-      validatedData.senha,
-    );
-
     try {
-      await signIn('credentials', {
-        email: validatedData.email,
-        senha: validatedData.senha,
-        redirect: false,
-      });
+      await createUser(
+        validatedData.nome,
+        validatedData.email,
+        validatedData.whatsapp,
+        validatedData.atividade,
+        validatedData.senha,
+      );
 
-      return { status: 'success' };
-    } catch (signInError) {
-      console.error('Erro ao fazer login após registro:', signInError);
-      // Mesmo com erro no signIn, retornamos sucesso pois o usuário foi criado
-      return { status: 'success' };
+      try {
+        await signIn('credentials', {
+          email: validatedData.email,
+          senha: validatedData.senha,
+          redirect: false,
+        });
+
+        return { status: 'success' };
+      } catch (signInError) {
+        console.error('Erro ao fazer login após registro:', signInError);
+        // Mesmo com erro no signIn, retornamos sucesso pois o usuário foi criado
+        return { status: 'success' };
+      }
+    } catch (dbError) {
+      console.error('Erro ao criar usuário no banco de dados:', dbError);
+      return { status: 'failed' };
     }
   } catch (error) {
     console.error('Erro no registro:', error);

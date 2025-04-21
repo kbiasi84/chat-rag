@@ -19,7 +19,6 @@ import {
   getTrailingMessageId,
 } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
 import {
   getKnowledgeInfo,
   analyzeQuery,
@@ -127,19 +126,13 @@ export async function POST(request: Request) {
             experimental_activeTools:
               selectedChatModel === 'chat-model-reasoning'
                 ? []
-                : [
-                    'getWeather',
-                    'analyzeQuery',
-                    'getKnowledgeInfo',
-                    'addToKnowledgeBase',
-                  ],
+                : ['analyzeQuery', 'getKnowledgeInfo', 'addToKnowledgeBase'],
             experimental_transform: smoothStream({
               chunking: 'word',
               delayInMs: 15,
             }),
             experimental_generateMessageId: generateUUID,
             tools: {
-              getWeather,
               analyzeQuery,
               getKnowledgeInfo,
               addToKnowledgeBase,

@@ -30,8 +30,8 @@ export async function getUser(email: string): Promise<Array<User>> {
   try {
     return await db.select().from(user).where(eq(user.email, email));
   } catch (error) {
-    console.error('Failed to get user from database');
-    throw error;
+    console.error('Falha ao buscar usuário no banco de dados:', error);
+    throw new Error('Falha ao buscar usuário no banco de dados');
   }
 }
 
@@ -54,8 +54,20 @@ export async function createUser(
       senha: hash,
     });
   } catch (error) {
-    console.error('Falha ao gravar usuário!');
-    throw error;
+    console.error('Falha ao gravar usuário no banco de dados:', error);
+
+    // Verificar se é um erro de restrição única (usuário já existe)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (
+      errorMessage.includes('unique constraint') ||
+      errorMessage.includes('duplicate key')
+    ) {
+      throw new Error('Este email já está sendo utilizado por outro usuário');
+    }
+
+    throw new Error(
+      'Não foi possível criar o usuário. Por favor, tente novamente.',
+    );
   }
 }
 

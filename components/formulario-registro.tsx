@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type FormularioRegistroProps = {
   action: NonNullable<string | ((formData: FormData) => void | Promise<void>)>;
@@ -23,22 +23,50 @@ export function FormularioRegistro({
 }: FormularioRegistroProps) {
   const [whatsapp, setWhatsapp] = useState('');
 
-  // Função para aplicar a máscara de telefone
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value;
-
+  // Função para aplicar a máscara de telefone a qualquer string
+  const formatPhoneNumber = (value: string) => {
     // Remove todos os caracteres não numéricos
-    value = value.replace(/\D/g, '');
+    let numericValue = value.replace(/\D/g, '');
 
-    // Aplica a máscara conforme o usuário digita
-    if (value.length <= 11) {
-      // Formato: (99) 99999-9999
-      value = value.replace(/^(\d{2})(\d)/g, '($1) $2');
-      value = value.replace(/(\d)(\d{4})$/, '$1-$2');
+    // Limita a 11 dígitos (com DDD)
+    if (numericValue.length > 11) {
+      numericValue = numericValue.substring(0, 11);
     }
 
-    setWhatsapp(value);
+    // Aplica a máscara
+    if (numericValue.length > 2) {
+      numericValue = numericValue.replace(/^(\d{2})(\d)/g, '($1) $2');
+    }
+    if (numericValue.length > 7) {
+      numericValue = numericValue.replace(/(\d)(\d{4})$/, '$1-$2');
+    }
+
+    return numericValue;
   };
+
+  // Função para tratar mudanças no campo de telefone
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formattedValue = formatPhoneNumber(e.target.value);
+    setWhatsapp(formattedValue);
+  };
+
+  // Detectar e corrigir preenchimento automático
+  useEffect(() => {
+    // Timer para verificar após o carregamento da página e possível autopreenchimento
+    const timer = setTimeout(() => {
+      const whatsappInput = document.getElementById(
+        'whatsapp',
+      ) as HTMLInputElement | null;
+
+      if (whatsappInput?.value && whatsappInput.value !== whatsapp) {
+        // O navegador preencheu automaticamente um valor diferente do estado
+        const formattedValue = formatPhoneNumber(whatsappInput.value);
+        setWhatsapp(formattedValue);
+      }
+    }, 300); // tempo suficiente para o autopreenchimento ocorrer
+
+    return () => clearTimeout(timer);
+  }, [whatsapp]);
 
   return (
     <Form action={action} className="flex flex-col gap-4 px-4 sm:px-16">
@@ -59,6 +87,8 @@ export function FormularioRegistro({
           autoComplete="name"
           required
           autoFocus
+          minLength={2}
+          title="Nome deve ter pelo menos 2 caracteres"
         />
       </div>
 
@@ -79,6 +109,7 @@ export function FormularioRegistro({
           autoComplete="email"
           required
           defaultValue={defaultEmail}
+          title="Digite um email válido"
         />
       </div>
 
@@ -100,7 +131,18 @@ export function FormularioRegistro({
           required
           value={whatsapp}
           onChange={handlePhoneChange}
+          onFocus={(e) => {
+            // Se o valor não estiver no formato correto, limpar para forçar digitação manual
+            if (
+              e.target.value &&
+              !e.target.value.match(/^\(\d{2}\) \d{5}-\d{4}$/)
+            ) {
+              const formattedValue = formatPhoneNumber(e.target.value);
+              setWhatsapp(formattedValue);
+            }
+          }}
           maxLength={15} // Limite para o formato (99) 99999-9999
+          title="WhatsApp deve estar no formato (99) 99999-9999"
         />
       </div>
 
@@ -141,6 +183,8 @@ export function FormularioRegistro({
           className="bg-muted text-md md:text-sm"
           type="password"
           required
+          minLength={6}
+          title="A senha deve ter pelo menos 6 caracteres"
         />
       </div>
 
