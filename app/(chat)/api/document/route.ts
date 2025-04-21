@@ -1,10 +1,12 @@
 import { auth } from '@/app/(auth)/auth';
-import { ArtifactKind } from '@/components/artifact';
 import {
   deleteDocumentsByIdAfterTimestamp,
   getDocumentsById,
   saveDocument,
 } from '@/lib/db/queries';
+
+// Definir o tipo DocumentKind localmente
+type DocumentKind = 'text' | 'code' | 'image' | 'sheet';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -53,7 +55,7 @@ export async function POST(request: Request) {
     content,
     title,
     kind,
-  }: { content: string; title: string; kind: ArtifactKind } =
+  }: { content: string; title: string; kind: DocumentKind } =
     await request.json();
 
   if (session.user?.id) {

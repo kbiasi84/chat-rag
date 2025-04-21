@@ -11,28 +11,27 @@ import { getDocumentTimestampByIndex } from '@/lib/utils';
 
 import { LoaderIcon } from './icons';
 import { Button } from './ui/button';
-import { useArtifact } from '@/hooks/use-artifact';
 
 interface VersionFooterProps {
   handleVersionChange: (type: 'next' | 'prev' | 'toggle' | 'latest') => void;
   documents: Array<Document> | undefined;
   currentVersionIndex: number;
+  documentId: string;
 }
 
 export const VersionFooter = ({
   handleVersionChange,
   documents,
   currentVersionIndex,
+  documentId,
 }: VersionFooterProps) => {
-  const { artifact } = useArtifact();
-
   const { width } = useWindowSize();
   const isMobile = width < 768;
 
   const { mutate } = useSWRConfig();
   const [isMutating, setIsMutating] = useState(false);
 
-  if (!documents) return;
+  if (!documents) return null;
 
   return (
     <motion.div
@@ -56,8 +55,8 @@ export const VersionFooter = ({
             setIsMutating(true);
 
             mutate(
-              `/api/document?id=${artifact.documentId}`,
-              await fetch(`/api/document?id=${artifact.documentId}`, {
+              `/api/document?id=${documentId}`,
+              await fetch(`/api/document?id=${documentId}`, {
                 method: 'PATCH',
                 body: JSON.stringify({
                   timestamp: getDocumentTimestampByIndex(

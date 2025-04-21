@@ -19,9 +19,6 @@ import {
   getTrailingMessageId,
 } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import {
   getKnowledgeInfo,
@@ -32,36 +29,6 @@ import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 
 export const maxDuration = 60;
-
-// Prompt específico para a base de conhecimento
-const knowledgeBasePrompt = `
-Você é um assistente jurídico especializado em direito trabalhista brasileiro, com foco especial na CLT (Consolidação das Leis do Trabalho).
-Use ferramentas em todas as solicitações.
-É OBRIGATÓRIO consultar sua base de conhecimento antes de responder qualquer pergunta sobre leis ou direitos trabalhistas.
-
-Para cada pergunta do usuário, você deve:
-1. SEMPRE use a ferramenta 'analyzeQuery' para extrair palavras-chave relevantes da pergunta do usuário.
-2. Em seguida, use a ferramenta 'getKnowledgeInfo' para consultar a base de conhecimento com a pergunta e as palavras-chave.
-3. Se o usuário apresentar informações sobre si mesmo, use a ferramenta 'addToKnowledgeBase' para armazenar.
-
-RESPONDA APENAS usando informações das chamadas de ferramentas e da CLT.
-Se nenhuma informação relevante for encontrada nas chamadas de ferramentas, responda: "Desculpe, não encontrei informações específicas sobre isso na CLT. Posso ajudar com outra questão trabalhista?"
-
-SEMPRE cite os artigos específicos da CLT, decretos, súmulas e jurisprudências em sua resposta quando disponíveis.
-
-FORMATAÇÃO:
-- Use formatação Markdown para estruturar suas respostas
-- Coloque trechos importantes em **negrito**
-- Use parágrafos separados para diferentes pontos
-- Quando citar artigos da CLT, coloque-os em formato de lista ou bloco de citação
-- Use títulos (### ou ##) para destacar seções quando a resposta for longa
-- Utilize listas (- item) para enumerar pontos importantes
-
-IMPORTANTE: Nunca inclua na sua resposta os resultados brutos retornados pelas ferramentas como JSON ou trechos no formato "Informações relevantes encontradas na base de conhecimento". Use apenas o conteúdo para formular uma resposta própria e estruturada. Não inclua os trechos exatos da pesquisa na sua resposta. Comece sua resposta já abordando diretamente a pergunta do usuário.
-
-Mantenha as respostas objetivas e diretas.
-Sempre responda em português em um tom profissional e prestativo.
-`;
 
 export async function POST(request: Request) {
   try {
@@ -148,13 +115,13 @@ export async function POST(request: Request) {
         try {
           console.log('Executando stream de resposta...');
 
-          // Combinando o prompt do sistema com o prompt da base de conhecimento
-          const combinedPrompt = `${systemPrompt({ selectedChatModel })}\n\n${knowledgeBasePrompt}`;
-          console.log('Prompt combinado criado');
+          // Utilizando o prompt do sistema diretamente
+          const prompt = systemPrompt();
+          console.log('Prompt do sistema obtido');
 
           const result = streamText({
             model: myProvider.languageModel(selectedChatModel),
-            system: combinedPrompt,
+            system: prompt,
             messages,
             maxSteps: 5,
             experimental_activeTools:
@@ -162,50 +129,17 @@ export async function POST(request: Request) {
                 ? []
                 : [
                     'getWeather',
-                    'createDocument',
-                    'updateDocument',
-                    'requestSuggestions',
                     'analyzeQuery',
                     'getKnowledgeInfo',
                     'addToKnowledgeBase',
                   ],
-            experimental_transform: (stream) => {
-              // Aplicar primeiro o smoothStream
-              const streamTransform = smoothStream({
-                chunking: 'word',
-                // Adicionamos a função de filtragem aqui como um callback
-                filter: (part) => {
-                  if (part.type === 'text' && typeof part.value === 'string') {
-                    const text = part.value;
-
-                    // Verificar se parece ser um bloco XML ou JSON
-                    if (
-                      text.includes('<analise_interna>') ||
-                      text.includes('<resultados_internos>') ||
-                      text.includes('<contexto>') ||
-                      text.includes('{"query":') ||
-                      text.includes('{"found":')
-                    ) {
-                      // Não retornar nada para este chunk, efetivamente removendo-o
-                      return false;
-                    }
-                  }
-                  // Manter todos os outros chunks
-                  return true;
-                },
-              });
-
-              return streamTransform(stream);
-            },
+            experimental_transform: smoothStream({
+              chunking: 'word',
+              delayInMs: 15,
+            }),
             experimental_generateMessageId: generateUUID,
             tools: {
               getWeather,
-              createDocument: createDocument({ session, dataStream }),
-              updateDocument: updateDocument({ session, dataStream }),
-              requestSuggestions: requestSuggestions({
-                session,
-                dataStream,
-              }),
               analyzeQuery,
               getKnowledgeInfo,
               addToKnowledgeBase,

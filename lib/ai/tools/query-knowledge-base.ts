@@ -60,7 +60,7 @@ export const getKnowledgeInfo = tool({
       console.log(`Encontrados ${directResults.length} resultados diretos`);
 
       // Depois tenta com cada palavra-chave, se fornecidas
-      let keywordResults = [];
+      let keywordResults: any[] = [];
       if (keywords.length > 0) {
         console.log('Buscando resultados por palavras-chave...');
         try {
@@ -122,55 +122,54 @@ export const getKnowledgeInfo = tool({
 
       if (finalResults.length === 0) {
         console.log('Nenhuma informação relevante encontrada');
-        return 'Não foram encontradas informações relevantes na base de conhecimento.';
+        return {
+          found: false,
+          message:
+            'Não foram encontradas informações relevantes na base de conhecimento.',
+          fragments: [],
+          references: [],
+        };
       }
 
-      // Formata os resultados para apresentação
-      const formattedResults = finalResults
-        .slice(0, 8)
-        .map((item, index) => {
-          const similarity = item?.similarity ?? 0;
-          const references = extractLegalReferences(item.content);
-          const referencesText =
-            references.length > 0
-              ? `\nReferências Legais Identificadas: ${references.join(', ')}`
-              : '';
+      // Formatar os resultados para um formato limpo
+      const formattedFragments = finalResults.slice(0, 8).map((item, index) => {
+        const similarity = item?.similarity ?? 0;
 
-          return `
----
-Trecho #${index + 1} (Relevância: ${(similarity * 100).toFixed(2)}%)
-Fonte: ${item.resourceId || 'Não especificada'}${referencesText}
-Conteúdo:
-${item.content}
----`;
-        })
-        .join('\n');
+        return {
+          id: index + 1,
+          content: item.content,
+          relevance: (similarity * 100).toFixed(2),
+          source: item.resourceId || 'Não especificada',
+        };
+      });
 
       // Formatação das referências legais encontradas
       const uniqueLegalReferences = [...new Set(allLegalReferences)];
-      const legalReferencesText =
-        uniqueLegalReferences.length > 0
-          ? `\n\nReferências Legais Identificadas:\n${uniqueLegalReferences.join('\n')}`
-          : '';
 
       console.log(
-        `Retornando ${finalResults.slice(0, 8).length} fragmentos formatados`,
+        `Retornando ${formattedFragments.length} fragmentos formatados`,
       );
       console.log('--------- FIM DA CONSULTA ---------');
 
-      // Retornar os resultados em um formato que indique claramente ao modelo
-      // que não deve exibir os dados brutos, mas usá-los para formular a resposta
-      return `<resultados_internos>
-<contexto>
-${formattedResults}${legalReferencesText}
-</contexto>
-</resultados_internos>
-
-Utilize os resultados internos acima para formular sua resposta. Cite os artigos e referências legais relevantes, mas NÃO exiba os trechos ou resultados brutos.`;
-    } catch (error) {
+      // Retornar objeto estruturado com os resultados formatados
+      return {
+        found: true,
+        fragments: formattedFragments,
+        references: uniqueLegalReferences,
+      };
+    } catch (error: unknown) {
       console.error('ERRO NA CONSULTA À BASE DE CONHECIMENTO:', error);
-      console.error(error.stack || 'Sem stack trace');
-      return `Erro ao consultar a base de conhecimento: ${error.message || 'Erro desconhecido'}`;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro desconhecido';
+      const stackTrace =
+        error instanceof Error ? error.stack : 'Sem stack trace';
+      console.error(stackTrace || 'Sem stack trace');
+      return {
+        found: false,
+        message: `Erro ao consultar a base de conhecimento: ${errorMessage}`,
+        fragments: [],
+        references: [],
+      };
     }
   },
 });
@@ -206,24 +205,27 @@ export const analyzeQuery = tool({
       );
       console.log('--------- FIM DA ANÁLISE ---------');
 
-      // Retornar em formato de texto em vez de JSON
-      return `<analise_interna>
-<consulta>${query}</consulta>
-<palavras_chave>${object.keywords?.join(', ') || 'nenhuma'}</palavras_chave>
-</analise_interna>
-
-Utilize estas palavras-chave para sua consulta à base de conhecimento.`;
-    } catch (error) {
+      // Retornar um objeto estruturado com resultado da análise
+      return {
+        query,
+        success: true,
+        keywords: object.keywords || [],
+      };
+    } catch (error: unknown) {
       console.error('ERRO NA ANÁLISE DE CONSULTA:', error);
-      console.error(error.stack || 'Sem stack trace');
-      // Em caso de erro, retornamos a consulta original sem palavras-chave
-      return `<analise_interna>
-<consulta>${query}</consulta>
-<palavras_chave>nenhuma</palavras_chave>
-<erro>Ocorreu um erro na análise</erro>
-</analise_interna>
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro desconhecido';
+      const stackTrace =
+        error instanceof Error ? error.stack : 'Sem stack trace';
+      console.error(stackTrace || 'Sem stack trace');
 
-Continue com a consulta usando apenas os termos originais.`;
+      // Em caso de erro, retornar objeto com status de falha
+      return {
+        query,
+        success: false,
+        message: `Não foi possível extrair palavras-chave da consulta: "${query}". ${errorMessage}`,
+        keywords: [],
+      };
     }
   },
 });
@@ -257,11 +259,25 @@ export const addToKnowledgeBase = tool({
       console.log('Conteúdo adicionado com sucesso');
       console.log('--------- FIM DA ADIÇÃO ---------');
 
-      return 'Conteúdo adicionado com sucesso à base de conhecimento.';
-    } catch (error) {
+      return {
+        success: true,
+        message: 'Conteúdo adicionado com sucesso à base de conhecimento.',
+        resourceId:
+          typeof result === 'object' && result !== null ? result.id : null,
+      };
+    } catch (error: unknown) {
       console.error('ERRO AO ADICIONAR CONTEÚDO:', error);
-      console.error(error.stack || 'Sem stack trace');
-      return `Erro ao adicionar conteúdo à base de conhecimento: ${error.message || 'Erro desconhecido'}`;
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro desconhecido';
+      const stackTrace =
+        error instanceof Error ? error.stack : 'Sem stack trace';
+      console.error(stackTrace || 'Sem stack trace');
+
+      return {
+        success: false,
+        message: `Erro ao adicionar conteúdo à base de conhecimento: ${errorMessage}`,
+        resourceId: null,
+      };
     }
   },
 });
