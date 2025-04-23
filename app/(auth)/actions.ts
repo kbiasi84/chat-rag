@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 
-import { createUser, getUser } from '@/lib/db/queries';
+import { createUser, getUser, updateUserProfile } from '@/lib/db/queries';
 
 import { signIn } from './auth';
 
@@ -119,5 +119,52 @@ export const register = async (
     }
 
     return { status: 'failed' };
+  }
+};
+
+export interface UpdateProfileActionState {
+  status: 'idle' | 'in_progress' | 'success' | 'failed';
+  message?: string;
+}
+
+export const updateProfile = async (
+  _: UpdateProfileActionState,
+  formData: FormData,
+): Promise<UpdateProfileActionState> => {
+  try {
+    const userId = formData.get('userId') as string;
+
+    if (!userId) {
+      return {
+        status: 'failed',
+        message: 'ID do usuário não encontrado',
+      };
+    }
+
+    const data = {
+      nome: (formData.get('nome') as string) || undefined,
+      whatsapp: (formData.get('whatsapp') as string) || undefined,
+      atividade: (formData.get('atividade') as string) || undefined,
+    };
+
+    const result = await updateUserProfile(userId, data);
+
+    if (result.success) {
+      return {
+        status: 'success',
+        message: result.message,
+      };
+    } else {
+      return {
+        status: 'failed',
+        message: result.message,
+      };
+    }
+  } catch (error) {
+    console.error('Erro ao atualizar perfil:', error);
+    return {
+      status: 'failed',
+      message: error instanceof Error ? error.message : 'Erro desconhecido',
+    };
   }
 };

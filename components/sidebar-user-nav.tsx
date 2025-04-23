@@ -1,5 +1,11 @@
 'use client';
-import { ChevronUp } from 'lucide-react';
+import {
+  ChevronUp,
+  User as UserIcon,
+  Settings,
+  BookOpen,
+  LogOut,
+} from 'lucide-react';
 import Image from 'next/image';
 import type { User } from 'next-auth';
 import { signOut } from 'next-auth/react';
@@ -24,11 +30,17 @@ export function SidebarUserNav({ user }: { user: User }) {
   const { setTheme, theme } = useTheme();
   const router = useRouter();
 
-  // Log temporário para verificar os dados disponíveis
-  console.log('SidebarUserNav - user object:', JSON.stringify(user, null, 2));
+  // Extrair o nome e perfil do usuário
+  const nome = user?.nome;
+  const perfil = user?.perfil;
+  const email = user?.email || '';
+
+  // Como fallback, usar parte do email antes do @ se nome não estiver disponível
+  const emailUsername = email.split('@')[0];
+  const displayName = nome || emailUsername;
 
   // Verificar se o usuário é admin
-  const isAdmin = (user as any)?.perfil === 'admin';
+  const isAdmin = perfil === 'admin';
 
   return (
     <SidebarMenu>
@@ -37,16 +49,13 @@ export function SidebarUserNav({ user }: { user: User }) {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent bg-background data-[state=open]:text-sidebar-accent-foreground h-10">
               <Image
-                src={`https://avatar.vercel.sh/${user.email}`}
-                alt={(user as any)?.nome ?? user.email ?? 'User Avatar'}
+                src={`https://avatar.vercel.sh/${email}`}
+                alt={displayName}
                 width={24}
                 height={24}
                 className="rounded-full"
               />
-              {/* Exibir nome ao invés do email */}
-              <span className="truncate">
-                {(user as any)?.nome || user.email}
-              </span>
+              <span className="truncate capitalize">{displayName}</span>
               <ChevronUp className="ml-auto" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
@@ -58,13 +67,22 @@ export function SidebarUserNav({ user }: { user: User }) {
               className="cursor-pointer"
               onSelect={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              {`Alterar para cor ${theme === 'light' ? 'Escura' : 'Clara'}`}
+              <Settings className="mr-2 h-4 w-4" />
+              {`Modo ${theme === 'light' ? 'Escuro' : 'Claro'}`}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuItem asChild>
+              <Link href="/perfil" className="w-full cursor-pointer">
+                <UserIcon className="mr-2 h-4 w-4" />
+                Meu Perfil
+              </Link>
+            </DropdownMenuItem>
+
+            <DropdownMenuItem asChild>
               <Link href="/planos" className="w-full cursor-pointer">
+                <BookOpen className="mr-2 h-4 w-4" />
                 Meu Plano
               </Link>
             </DropdownMenuItem>
@@ -74,11 +92,9 @@ export function SidebarUserNav({ user }: { user: User }) {
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link
-                    href="/admin/base-conhecimento"
-                    className="w-full cursor-pointer"
-                  >
-                    Administrador
+                  <Link href="/admin" className="w-full cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Painel de Administração
                   </Link>
                 </DropdownMenuItem>
               </>
@@ -89,13 +105,14 @@ export function SidebarUserNav({ user }: { user: User }) {
             <DropdownMenuItem asChild>
               <button
                 type="button"
-                className="w-full cursor-pointer"
+                className="w-full cursor-pointer flex items-center"
                 onClick={() => {
                   signOut({
                     redirectTo: '/',
                   });
                 }}
               >
+                <LogOut className="mr-2 h-4 w-4" />
                 Sair
               </button>
             </DropdownMenuItem>

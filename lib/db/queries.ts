@@ -28,7 +28,27 @@ const db = drizzle(client);
 
 export async function getUser(email: string): Promise<Array<User>> {
   try {
-    return await db.select().from(user).where(eq(user.email, email));
+    // Selecionando campos explicitamente para garantir que todos sejam retornados
+    const result = await db
+      .select({
+        id: user.id,
+        email: user.email,
+        nome: user.nome,
+        senha: user.senha,
+        whatsapp: user.whatsapp,
+        atividade: user.atividade,
+        perfil: user.perfil,
+        criadoEm: user.criadoEm,
+        atualizadoEm: user.atualizadoEm,
+      })
+      .from(user)
+      .where(eq(user.email, email));
+
+    console.log(
+      'getUser - Resultado completo:',
+      JSON.stringify(result, null, 2),
+    );
+    return result;
   } catch (error) {
     console.error('Falha ao buscar usuário no banco de dados:', error);
     throw new Error('Falha ao buscar usuário no banco de dados');
@@ -41,18 +61,37 @@ export async function createUser(
   whatsapp: string,
   atividade: string,
   senha: string,
+  perfil: string = 'usuario', // Valor padrão, se não for fornecido
 ) {
   const salt = genSaltSync(10);
   const hash = hashSync(senha, salt);
 
   try {
-    return await db.insert(user).values({
+    console.log('createUser - Criando usuário com os dados:', {
+      nome,
+      email,
+      whatsapp,
+      atividade,
+      perfil,
+    });
+
+    const result = await db.insert(user).values({
       nome,
       email,
       whatsapp,
       atividade,
       senha: hash,
+      perfil, // Definindo explicitamente o perfil
     });
+
+    // Buscar o usuário recém-criado para confirmar todos os campos
+    const novoUsuario = await getUser(email);
+    console.log(
+      'createUser - Usuário criado:',
+      JSON.stringify(novoUsuario, null, 2),
+    );
+
+    return result;
   } catch (error) {
     console.error('Falha ao gravar usuário no banco de dados:', error);
 
@@ -426,5 +465,44 @@ export async function updateChatVisiblityById({
   } catch (error) {
     console.error('Failed to update chat visibility in database');
     throw error;
+  }
+}
+
+export async function updateUserProfile(
+  userId: string,
+  data: {
+    nome?: string;
+    whatsapp?: string;
+    atividade?: string;
+  },
+) {
+  try {
+    console.log('Atualizando perfil do usuário:', userId);
+    console.log('Dados para atualização:', data);
+
+    // Filtrar campos nulos ou indefinidos
+    const filteredData: Record<string, any> = {};
+    Object.entries(data).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        filteredData[key] = value;
+      }
+    });
+
+    if (Object.keys(filteredData).length === 0) {
+      return { success: false, message: 'Nenhum dado válido para atualização' };
+    }
+
+    // Adicionar timestamp de atualização
+    filteredData.atualizadoEm = new Date();
+
+    await db.update(user).set(filteredData).where(eq(user.id, userId));
+
+    return { success: true, message: 'Perfil atualizado com sucesso' };
+  } catch (error) {
+    console.error('Erro ao atualizar perfil do usuário:', error);
+    if (error instanceof Error) {
+      return { success: false, message: error.message };
+    }
+    return { success: false, message: 'Erro ao atualizar perfil' };
   }
 }

@@ -128,35 +128,8 @@ const PurePreviewMessage = ({
                 }
               }
 
-              if (type === 'tool-invocation') {
-                const { toolInvocation } = part;
-                const { toolName, toolCallId, state } = toolInvocation;
-
-                if (state === 'call') {
-                  const { args } = toolInvocation;
-
-                  return (
-                    <div
-                      key={toolCallId}
-                      className={cx({
-                        skeleton: false,
-                      })}
-                    >
-                      {/* Componente Weather removido */}
-                    </div>
-                  );
-                }
-
-                if (state === 'result') {
-                  const { result } = toolInvocation;
-
-                  return (
-                    <div key={toolCallId}>
-                      {/* Componente Weather removido */}
-                    </div>
-                  );
-                }
-              }
+              // Outros tipos de partes são ignorados silenciosamente
+              return null;
             })}
 
             {!isReadonly && (
@@ -212,7 +185,7 @@ export const ThinkingMessage = () => {
 
         <div className="flex flex-col gap-2 w-full">
           <div className="flex flex-col gap-4 text-muted-foreground">
-            Processando informações...
+            Pensando...
           </div>
         </div>
       </div>
