@@ -80,13 +80,6 @@ export function SidebarUserNav({ user }: { user: User }) {
               </Link>
             </DropdownMenuItem>
 
-            <DropdownMenuItem asChild>
-              <Link href="/planos" className="w-full cursor-pointer">
-                <BookOpen className="mr-2 h-4 w-4" />
-                Meu Plano
-              </Link>
-            </DropdownMenuItem>
-
             {/* Menu de Administrador - apenas para admins */}
             {isAdmin && (
               <>

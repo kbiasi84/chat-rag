@@ -1,11 +1,100 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Check } from 'lucide-react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { toast } from 'sonner';
+
+import { PLANOS, LIMITES_CONSULTA } from '@/lib/db/schema/subscription';
+import {
+  getSubscriptionData,
+  createStripeCheckout,
+} from '@/lib/actions/subscription';
 
 export default function PlanosPage() {
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [loading, setLoading] = useState(false);
+  const [planoAtual, setPlanoAtual] = useState<string | null>(null);
+  const [buttonLoading, setButtonLoading] = useState<string | null>(null);
+
+  // Buscar plano atual do usuário
+  useEffect(() => {
+    async function fetchSubscription() {
+      try {
+        if (session?.user?.id) {
+          setLoading(true);
+          const data = await getSubscriptionData(session.user.id);
+          setPlanoAtual(data.plano);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar assinatura:', error);
+        toast.error('Não foi possível carregar seu plano atual');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (session?.user) {
+      fetchSubscription();
+    }
+  }, [session]);
+
+  // Lidar com a seleção de plano
+  const handleSelectPlan = async (plano: keyof typeof PLANOS) => {
+    try {
+      // Se já é o plano atual, não fazer nada
+      if (plano === planoAtual) {
+        router.push('/configuracoes?tab=cobranca');
+        return;
+      }
+
+      if (!session?.user?.id || !session.user.email) {
+        toast.error('Você precisa estar logado para assinar um plano');
+        return;
+      }
+
+      setButtonLoading(plano);
+
+      // Se está no plano gratuito e quer fazer upgrade, criar checkout
+      const { url } = await createStripeCheckout(
+        session.user.id,
+        session.user.email,
+        plano,
+        `${window.location.origin}/configuracoes?tab=cobranca`,
+      );
+
+      // Redirecionar para o checkout
+      window.location.href = url;
+    } catch (error) {
+      console.error('Erro ao selecionar plano:', error);
+      toast.error('Não foi possível processar sua solicitação');
+    } finally {
+      setButtonLoading(null);
+    }
+  };
+
+  // Verificar se é plano atual
+  const isCurrentPlan = (plano: string) => planoAtual === plano;
+
+  // Texto do botão com base no plano atual
+  const getButtonText = (plano: string) => {
+    if (loading || !session?.user) return 'Carregando...';
+    if (isCurrentPlan(plano)) return 'Plano Atual';
+    if (planoAtual === PLANOS.FREE) return 'Assinar Agora';
+    if (plano === PLANOS.FREE) return 'Fazer Downgrade';
+    return planoAtual === PLANOS.ENTERPRISE
+      ? 'Fazer Downgrade'
+      : plano === PLANOS.ENTERPRISE
+        ? 'Fazer Upgrade'
+        : planoAtual === PLANOS.STANDARD && plano === PLANOS.STARTER
+          ? 'Fazer Downgrade'
+          : 'Fazer Upgrade';
+  };
+
   return (
     <div className="container mx-auto py-12 px-4">
       <div className="text-center mb-12">
@@ -16,7 +105,11 @@ export default function PlanosPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
         {/* Plano Starter */}
-        <Card className="flex flex-col border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+        <Card
+          className={`flex flex-col border rounded-lg overflow-hidden hover:shadow-md transition-shadow ${
+            isCurrentPlan(PLANOS.STARTER) ? 'ring-2 ring-primary' : ''
+          }`}
+        >
           <div className="p-6 flex flex-col h-full">
             <h2 className="text-2xl font-bold">Starter</h2>
             <p className="text-muted-foreground mt-2">
@@ -31,7 +124,7 @@ export default function PlanosPage() {
             <div className="space-y-4 flex-grow">
               <div className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                <span>30 consultas/mês</span>
+                <span>{LIMITES_CONSULTA[PLANOS.STARTER]} consultas/mês</span>
               </div>
               <div className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
@@ -44,20 +137,34 @@ export default function PlanosPage() {
             </div>
 
             <div className="mt-8">
-              <Link href="/configuracoes?tab=cobranca&plan=starter">
-                <Button
-                  className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800"
-                  variant="secondary"
-                >
-                  Assinar Agora
-                </Button>
-              </Link>
+              <Button
+                className={`w-full ${
+                  isCurrentPlan(PLANOS.STARTER)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-gray-200 hover:bg-gray-300 text-gray-800'
+                }`}
+                variant={
+                  isCurrentPlan(PLANOS.STARTER) ? 'default' : 'secondary'
+                }
+                disabled={loading || buttonLoading !== null}
+                onClick={() => handleSelectPlan(PLANOS.STARTER)}
+              >
+                {buttonLoading === PLANOS.STARTER
+                  ? 'Processando...'
+                  : getButtonText(PLANOS.STARTER)}
+              </Button>
             </div>
           </div>
         </Card>
 
         {/* Plano Standard */}
-        <Card className="flex flex-col border border-orange-500 rounded-lg overflow-hidden hover:shadow-md transition-shadow relative">
+        <Card
+          className={`flex flex-col border ${
+            isCurrentPlan(PLANOS.STANDARD)
+              ? 'ring-2 ring-primary border-orange-500'
+              : 'border-orange-500'
+          } rounded-lg overflow-hidden hover:shadow-md transition-shadow relative`}
+        >
           <div className="absolute top-0 right-0 bg-orange-500 text-white px-3 py-1 rounded-bl-lg">
             Popular
           </div>
@@ -75,7 +182,7 @@ export default function PlanosPage() {
             <div className="space-y-4 flex-grow">
               <div className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                <span>60 consultas/mês</span>
+                <span>{LIMITES_CONSULTA[PLANOS.STANDARD]} consultas/mês</span>
               </div>
               <div className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
@@ -88,17 +195,30 @@ export default function PlanosPage() {
             </div>
 
             <div className="mt-8">
-              <Link href="/configuracoes?tab=cobranca&plan=standard">
-                <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white">
-                  Assinar Agora
-                </Button>
-              </Link>
+              <Button
+                className={`w-full ${
+                  isCurrentPlan(PLANOS.STANDARD)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-orange-500 hover:bg-orange-600 text-white'
+                }`}
+                variant={isCurrentPlan(PLANOS.STANDARD) ? 'default' : 'default'}
+                disabled={loading || buttonLoading !== null}
+                onClick={() => handleSelectPlan(PLANOS.STANDARD)}
+              >
+                {buttonLoading === PLANOS.STANDARD
+                  ? 'Processando...'
+                  : getButtonText(PLANOS.STANDARD)}
+              </Button>
             </div>
           </div>
         </Card>
 
         {/* Plano Enterprise */}
-        <Card className="flex flex-col border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
+        <Card
+          className={`flex flex-col border rounded-lg overflow-hidden hover:shadow-md transition-shadow ${
+            isCurrentPlan(PLANOS.ENTERPRISE) ? 'ring-2 ring-primary' : ''
+          }`}
+        >
           <div className="p-6 flex flex-col h-full">
             <h2 className="text-2xl font-bold">Enterprise</h2>
             <p className="text-muted-foreground mt-2">
@@ -113,7 +233,7 @@ export default function PlanosPage() {
             <div className="space-y-4 flex-grow">
               <div className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
-                <span>100 consultas/mês</span>
+                <span>{LIMITES_CONSULTA[PLANOS.ENTERPRISE]} consultas/mês</span>
               </div>
               <div className="flex items-start gap-2">
                 <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
@@ -126,11 +246,22 @@ export default function PlanosPage() {
             </div>
 
             <div className="mt-8">
-              <Link href="/configuracoes?tab=cobranca&plan=enterprise">
-                <Button className="w-full bg-black hover:bg-gray-800 text-white">
-                  Assinar Agora
-                </Button>
-              </Link>
+              <Button
+                className={`w-full ${
+                  isCurrentPlan(PLANOS.ENTERPRISE)
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-black hover:bg-gray-800 text-white'
+                }`}
+                variant={
+                  isCurrentPlan(PLANOS.ENTERPRISE) ? 'default' : 'default'
+                }
+                disabled={loading || buttonLoading !== null}
+                onClick={() => handleSelectPlan(PLANOS.ENTERPRISE)}
+              >
+                {buttonLoading === PLANOS.ENTERPRISE
+                  ? 'Processando...'
+                  : getButtonText(PLANOS.ENTERPRISE)}
+              </Button>
             </div>
           </div>
         </Card>

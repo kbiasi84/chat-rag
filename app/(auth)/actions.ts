@@ -2,7 +2,12 @@
 
 import { z } from 'zod';
 
-import { createUser, getUser, updateUserProfile } from '@/lib/db/queries';
+import {
+  createUser,
+  getUser,
+  updateUserProfile,
+  createFreeSubscription,
+} from '@/lib/db/queries';
 
 import { signIn } from './auth';
 
@@ -86,13 +91,16 @@ export const register = async (
     }
 
     try {
-      await createUser(
+      const userId = await createUser(
         validatedData.nome,
         validatedData.email,
         validatedData.whatsapp,
         validatedData.atividade,
         validatedData.senha,
       );
+
+      // Criar assinatura gratuita com 3 consultas
+      await createFreeSubscription(userId);
 
       try {
         await signIn('credentials', {
