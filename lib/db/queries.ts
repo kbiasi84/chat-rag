@@ -593,6 +593,9 @@ export async function upsertSubscription(
     const existingSubscription = await getUserSubscription(userId);
 
     if (existingSubscription) {
+      // Verificar se o plano mudou
+      const planChanged = existingSubscription.plano !== plano;
+
       // Atualizar a assinatura existente
       await db
         .update(subscription)
@@ -602,9 +605,18 @@ export async function upsertSubscription(
           stripeCustomerId,
           stripeSubscriptionId,
           terminaEm,
+          // Zerar a contagem de consultas se o plano mudou
+          ...(planChanged ? { consultasUsadas: 0 } : {}),
           atualizadoEm: new Date(),
         })
         .where(eq(subscription.id, existingSubscription.id));
+
+      // Registrar no log se o plano mudou
+      if (planChanged) {
+        console.log(
+          `Plano alterado de ${existingSubscription.plano} para ${plano}. Contagem de consultas zerada.`,
+        );
+      }
 
       return existingSubscription.id;
     } else {
@@ -618,6 +630,7 @@ export async function upsertSubscription(
           stripeCustomerId,
           stripeSubscriptionId,
           terminaEm,
+          consultasUsadas: 0, // Sempre começa com zero consultas em uma nova assinatura
         })
         .returning({ id: subscription.id });
 
@@ -727,5 +740,82 @@ export async function getUserPayments(userId: string): Promise<Payment[]> {
   } catch (error) {
     console.error('Falha ao buscar histórico de pagamentos:', error);
     throw new Error('Não foi possível buscar o histórico de pagamentos');
+  }
+}
+
+/**
+ * Cancelar assinaturas antigas do mesmo usuário
+ * Mantém apenas a assinatura mais recente ativa
+ */
+export async function cancelarAssinaturasAntigas(
+  userId: string,
+  currentStripeSubscriptionId: string,
+) {
+  try {
+    console.log(`Cancelando assinaturas antigas para o usuário ${userId}`);
+    console.log(`Preservando assinatura atual: ${currentStripeSubscriptionId}`);
+
+    // 1. Buscar todas as assinaturas do usuário no banco de dados
+    const assinaturas = await db
+      .select()
+      .from(subscription)
+      .where(eq(subscription.userId, userId))
+      .orderBy(desc(subscription.criadoEm));
+
+    console.log(
+      `Encontradas ${assinaturas.length} assinaturas para este usuário`,
+    );
+
+    // 2. Marcar como "canceled" todas as assinaturas que não sejam a atual
+    for (const assinatura of assinaturas) {
+      // Pular a assinatura atual
+      if (assinatura.stripeSubscriptionId === currentStripeSubscriptionId) {
+        console.log(`Mantendo assinatura atual: ${assinatura.id}`);
+        continue;
+      }
+
+      // Verificar se já está cancelada
+      if (assinatura.status === 'canceled') {
+        console.log(`Assinatura ${assinatura.id} já está cancelada`);
+        continue;
+      }
+
+      console.log(
+        `Cancelando assinatura ${assinatura.id} (${assinatura.stripeSubscriptionId})`,
+      );
+
+      // Atualizar no banco de dados
+      await db
+        .update(subscription)
+        .set({
+          status: 'canceled',
+          atualizadoEm: new Date(),
+        })
+        .where(eq(subscription.id, assinatura.id));
+
+      // Se tem um ID de assinatura do Stripe, cancelar no Stripe também
+      if (assinatura.stripeSubscriptionId) {
+        try {
+          // Importar o Stripe de forma dinâmica para evitar dependência circular
+          const { stripe } = await import('@/lib/stripe');
+
+          await stripe.subscriptions.cancel(assinatura.stripeSubscriptionId);
+          console.log(
+            `Assinatura do Stripe ${assinatura.stripeSubscriptionId} cancelada com sucesso`,
+          );
+        } catch (stripeError) {
+          console.error(
+            `Erro ao cancelar assinatura no Stripe: ${assinatura.stripeSubscriptionId}`,
+            stripeError,
+          );
+          // Continuar mesmo com erro do Stripe - pelo menos atualizamos no banco
+        }
+      }
+    }
+
+    console.log('Processo de cancelamento de assinaturas antigas concluído');
+  } catch (error) {
+    console.error('Erro ao cancelar assinaturas antigas:', error);
+    throw new Error('Não foi possível cancelar assinaturas antigas');
   }
 }

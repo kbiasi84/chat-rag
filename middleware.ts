@@ -5,5 +5,12 @@ import { authConfig } from '@/app/(auth)/auth.config';
 export default NextAuth(authConfig).auth;
 
 export const config = {
-  matcher: ['/', '/:id', '/api/:path*', '/login', '/register'],
+  // Rotas protegidas com autenticação, excluindo os endpoints de webhook
+  matcher: [
+    '/',
+    '/:id',
+    '/login',
+    '/register',
+    '/api/((?!webhook-stripe|webhook/stripe).*)',
+  ],
 };

@@ -8,11 +8,13 @@ import {
   getUserSubscription,
   getUserPayments,
   checkConsultaDisponivel,
+  updateSubscription,
 } from '@/lib/db/queries';
 import {
   getOrCreateStripeCustomer,
   createCheckoutSession,
   createBillingPortalSession,
+  cancelStripeSubscription,
   PRODUTOS_STRIPE,
 } from '@/lib/stripe';
 import { PLANOS, LIMITES_CONSULTA } from '@/lib/db/schema/subscription';
@@ -97,6 +99,7 @@ export async function createStripeCheckout(
       priceId,
       plano,
       returnUrl,
+      userId,
     );
 
     // Retornar URL de checkout
@@ -118,12 +121,35 @@ export async function createStripePortal(userId: string, returnUrl: string) {
       throw new Error('Usuário não possui assinatura ativa no Stripe');
     }
 
-    const portalSession = await createBillingPortalSession(
-      subscription.stripeCustomerId,
-      returnUrl,
-    );
+    try {
+      const portalSession = await createBillingPortalSession(
+        subscription.stripeCustomerId,
+        returnUrl,
+      );
+      return { url: portalSession.url };
+    } catch (stripeError: any) {
+      // Verificar se é o erro de configuração do portal
+      if (
+        stripeError?.message?.includes('No configuration provided') ||
+        stripeError?.message?.includes('customer portal settings')
+      ) {
+        console.error(
+          'Portal de cobrança do Stripe não configurado:',
+          stripeError,
+        );
 
-    return { url: portalSession.url };
+        // Para ambiente de desenvolvimento, oferecer uma solução alternativa
+        return {
+          configError: true,
+          message:
+            'O portal de cobrança ainda não está configurado. Por favor, configure-o no dashboard do Stripe.',
+          url: 'https://dashboard.stripe.com/test/settings/billing/portal',
+        };
+      }
+
+      // Outros erros do Stripe
+      throw stripeError;
+    }
   } catch (error) {
     console.error('Erro ao criar portal de cobrança:', error);
     throw new Error('Não foi possível acessar o portal de cobrança');
@@ -162,5 +188,38 @@ export async function verificarLimiteConsulta(userId: string) {
   } catch (error) {
     console.error('Erro ao verificar limite de consultas:', error);
     throw new Error('Não foi possível verificar seu limite de consultas');
+  }
+}
+
+/**
+ * Cancela a assinatura de um usuário
+ */
+export async function cancelarAssinatura(userId: string) {
+  try {
+    const subscription = await getUserSubscription(userId);
+
+    if (!subscription) {
+      throw new Error('Usuário não possui assinatura');
+    }
+
+    if (!subscription.stripeSubscriptionId) {
+      throw new Error('Assinatura não possui ID do Stripe');
+    }
+
+    // Cancelar no Stripe
+    const result = await cancelStripeSubscription(
+      subscription.stripeSubscriptionId,
+    );
+
+    // Atualizar no banco de dados
+    await updateSubscription(subscription.id, {
+      status: 'canceled',
+      terminaEm: result.canceledAt,
+    });
+
+    return { success: true, message: 'Assinatura cancelada com sucesso' };
+  } catch (error) {
+    console.error('Erro ao cancelar assinatura:', error);
+    throw new Error('Não foi possível cancelar a assinatura');
   }
 }

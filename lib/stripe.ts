@@ -51,6 +51,7 @@ export async function createCheckoutSession(
   priceId: string,
   plano: keyof typeof PLANOS,
   returnUrl: string,
+  userId: string,
 ) {
   try {
     const session = await stripe.checkout.sessions.create({
@@ -67,9 +68,10 @@ export async function createCheckoutSession(
       subscription_data: {
         metadata: {
           plano,
+          userId,
         },
       },
-      success_url: `${returnUrl}?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${returnUrl.split('?')[0]}?tab=cobranca&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${returnUrl}?canceled=true`,
     });
 
@@ -97,5 +99,26 @@ export async function createBillingPortalSession(
   } catch (error) {
     console.error('Erro ao criar portal de cobrança:', error);
     throw new Error('Falha ao acessar portal de cobrança');
+  }
+}
+
+/**
+ * Cancela uma assinatura do Stripe
+ */
+export async function cancelStripeSubscription(subscriptionId: string) {
+  try {
+    const canceledSubscription =
+      await stripe.subscriptions.cancel(subscriptionId);
+
+    return {
+      success: true,
+      status: canceledSubscription.status,
+      canceledAt: canceledSubscription.canceled_at
+        ? new Date(canceledSubscription.canceled_at * 1000)
+        : new Date(),
+    };
+  } catch (error) {
+    console.error('Erro ao cancelar assinatura no Stripe:', error);
+    throw new Error('Falha ao cancelar assinatura');
   }
 }

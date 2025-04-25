@@ -13,6 +13,7 @@ import Link from 'next/link';
 import {
   getSubscriptionData,
   createStripePortal,
+  cancelarAssinatura,
 } from '@/lib/actions/subscription';
 import { PLANOS, LIMITES_CONSULTA } from '@/lib/db/schema/subscription';
 
@@ -23,6 +24,7 @@ export default function CobrancaContent() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [subscriptionData, setSubscriptionData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // Função para formatar a data
   const formatDate = (date: string | Date | null) => {
@@ -60,18 +62,68 @@ export default function CobrancaContent() {
         throw new Error('Usuário não autenticado');
       }
 
-      const { url } = await createStripePortal(
+      const result = await createStripePortal(
         session.user.id,
         `${window.location.origin}/configuracoes?tab=cobranca`,
       );
 
+      // Verificar se temos um erro de configuração
+      if (result.configError) {
+        setError(result.message || 'Portal de cobrança não configurado');
+
+        // Para ambiente de desenvolvimento, podemos abrir a página de configuração
+        if (
+          confirm(
+            'O Portal de Cobrança do Stripe não está configurado. Deseja abrir a página de configuração do Stripe?',
+          )
+        ) {
+          window.open(result.url, '_blank');
+        }
+        return;
+      }
+
       // Redirecionar para o portal do Stripe
-      window.location.href = url;
+      window.location.href = result.url;
     } catch (error) {
       console.error('Erro ao abrir portal de pagamento:', error);
       setError('Não foi possível acessar o gerenciamento de pagamento');
     } finally {
       setPortalLoading(false);
+    }
+  };
+
+  // Função para cancelar assinatura
+  const handleCancelarAssinatura = async () => {
+    // Confirmar com o usuário
+    if (
+      !confirm(
+        'Tem certeza que deseja cancelar sua assinatura? Isso não poderá ser desfeito.',
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setCancelLoading(true);
+      if (!session?.user?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const result = await cancelarAssinatura(session.user.id);
+
+      // Atualizar dados da assinatura após cancelamento
+      const data = await getSubscriptionData(session.user.id);
+      setSubscriptionData(data);
+
+      // Mostrar confirmação
+      alert('Sua assinatura foi cancelada com sucesso.');
+    } catch (error) {
+      console.error('Erro ao cancelar assinatura:', error);
+      setError(
+        'Não foi possível cancelar sua assinatura. Por favor, tente novamente.',
+      );
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -204,10 +256,23 @@ export default function CobrancaContent() {
                       className={`font-medium flex items-center gap-1 ${
                         subscriptionData.status === 'active'
                           ? 'text-green-600'
-                          : 'text-amber-600'
+                          : subscriptionData.status === 'canceled'
+                            ? 'text-red-600'
+                            : 'text-amber-600'
                       }`}
                     >
-                      <Check size={16} /> {subscriptionData.statusPagamento}
+                      {subscriptionData.status === 'active' ? (
+                        <Check size={16} />
+                      ) : subscriptionData.status === 'canceled' ? (
+                        <AlertCircle size={16} />
+                      ) : (
+                        <AlertCircle size={16} />
+                      )}
+                      {subscriptionData.status === 'active'
+                        ? 'Ativo'
+                        : subscriptionData.status === 'canceled'
+                          ? 'Cancelado'
+                          : subscriptionData.statusPagamento || 'Inativo'}
                     </div>
                   </div>
                 </div>
@@ -293,30 +358,31 @@ export default function CobrancaContent() {
               </Card>
             )}
 
-          {subscriptionData.plano !== PLANOS.FREE && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-2 text-destructive">
-                  <AlertCircle size={20} />
-                  Cancelamento
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground mb-4">
-                  Cancele seu plano a qualquer momento. Você pode continuar
-                  usando o serviço até o final do período de cobrança atual.
-                </p>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={handleAtualizarPagamento}
-                  disabled={portalLoading}
-                >
-                  Cancelar plano
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+          {subscriptionData.plano !== PLANOS.FREE &&
+            subscriptionData.status === 'active' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center gap-2 text-destructive">
+                    <AlertCircle size={20} />
+                    Cancelamento
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground mb-4">
+                    Cancele seu plano a qualquer momento. Você pode continuar
+                    usando o serviço até o final do período de cobrança atual.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleCancelarAssinatura}
+                    disabled={cancelLoading}
+                  >
+                    {cancelLoading ? 'Processando...' : 'Cancelar plano'}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
         </>
       )}
     </>
