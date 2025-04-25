@@ -10,6 +10,8 @@ declare module 'next-auth' {
   interface User {
     nome?: string;
     perfil?: string;
+    whatsapp?: string;
+    atividade?: string;
   }
 
   interface Session {
@@ -18,6 +20,8 @@ declare module 'next-auth' {
       email: string;
       nome?: string;
       perfil?: string;
+      whatsapp?: string;
+      atividade?: string;
     };
   }
 
@@ -26,6 +30,8 @@ declare module 'next-auth' {
     email: string;
     nome?: string;
     perfil?: string;
+    whatsapp?: string;
+    atividade?: string;
   }
 }
 
@@ -35,6 +41,8 @@ interface JwtToken {
   email: string;
   nome?: string;
   perfil?: string;
+  whatsapp?: string;
+  atividade?: string;
   iat?: number;
   exp?: number;
   jti?: string;
@@ -73,6 +81,8 @@ export const {
             emailVerified: null,
             nome: users[0].nome || undefined,
             perfil: users[0].perfil || undefined,
+            whatsapp: users[0].whatsapp || undefined,
+            atividade: users[0].atividade || undefined,
           };
         } catch (error) {
           console.error('Erro na autorização:', error);
@@ -90,6 +100,8 @@ export const {
         token.nome = user.nome;
         token.perfil = user.perfil;
         token.name = user.nome || null;
+        token.whatsapp = user.whatsapp;
+        token.atividade = user.atividade;
       }
 
       return token;
@@ -104,6 +116,8 @@ export const {
       user.nome = token.nome;
       user.perfil = token.perfil;
       user.name = token.name || null;
+      user.whatsapp = token.whatsapp;
+      user.atividade = token.atividade;
 
       return session;
     },

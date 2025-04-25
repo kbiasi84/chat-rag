@@ -59,7 +59,7 @@ export function Chat({
     fetcher,
   );
 
-  const [attachments, setAttachments] = useState<Array<Attachment>>([]);
+  const [attachments] = useState<Array<Attachment>>([]);
 
   return (
     <div className="flex flex-col min-w-0 h-dvh bg-background">
@@ -89,8 +89,6 @@ export function Chat({
             handleSubmit={handleSubmit}
             status={status}
             stop={stop}
-            attachments={attachments}
-            setAttachments={setAttachments}
             messages={messages}
             setMessages={setMessages}
             append={append}

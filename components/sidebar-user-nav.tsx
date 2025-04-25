@@ -74,9 +74,9 @@ export function SidebarUserNav({ user }: { user: User }) {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem asChild>
-              <Link href="/perfil" className="w-full cursor-pointer">
-                <UserIcon className="mr-2 h-4 w-4" />
-                Meu Perfil
+              <Link href="/configuracoes" className="w-full cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                Configurações
               </Link>
             </DropdownMenuItem>
 
