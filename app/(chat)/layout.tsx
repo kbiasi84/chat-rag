@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { auth } from '../(auth)/auth';
 import Script from 'next/script';
 import { AuthProvider } from '@/components/providers';
+import { QueryLimitProvider } from '@/components/query-limit-provider';
 
 export const experimental_ppr = true;
 
@@ -23,10 +24,12 @@ export default async function Layout({
         strategy="beforeInteractive"
       />
       <AuthProvider>
-        <SidebarProvider defaultOpen={!isCollapsed}>
-          <AppSidebar user={session?.user} />
-          <SidebarInset>{children}</SidebarInset>
-        </SidebarProvider>
+        <QueryLimitProvider>
+          <SidebarProvider defaultOpen={!isCollapsed}>
+            <AppSidebar user={session?.user} />
+            <SidebarInset>{children}</SidebarInset>
+          </SidebarProvider>
+        </QueryLimitProvider>
       </AuthProvider>
     </>
   );
