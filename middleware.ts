@@ -1,9 +1,19 @@
-import NextAuth from 'next-auth';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { verificarConsultaMiddleware } from './app/(chat)/middleware';
 
-import { authConfig } from '@/app/(auth)/auth.config';
+export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
 
-export default NextAuth(authConfig).auth;
+  // Verificar se é uma rota de chat
+  if (pathname === '/' || pathname.startsWith('/chat/')) {
+    return verificarConsultaMiddleware(request);
+  }
+
+  // Permitir outras rotas
+  return NextResponse.next();
+}
 
 export const config = {
-  matcher: ['/', '/:id', '/api/:path*', '/login', '/register'],
+  matcher: ['/', '/chat/:path*'],
 };
