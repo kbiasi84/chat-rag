@@ -13,6 +13,8 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
+import { useQueryLimit } from './query-limit-provider';
+import { useRouter } from 'next/navigation';
 
 import { ArrowUpIcon, StopIcon } from './icons';
 import { Button } from './ui/button';
@@ -46,12 +48,43 @@ function PureMultimodalInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
+  const router = useRouter();
+  const {
+    ultimaConsulta,
+    planoAtingido,
+    consultasRestantes,
+    verificarConsulta,
+  } = useQueryLimit();
 
   useEffect(() => {
     if (textareaRef.current) {
       adjustHeight();
     }
   }, []);
+
+  // Monitorar mudanças no status para atualizar o limite de consultas após enviar mensagem
+  useEffect(() => {
+    // Quando o status mudar de 'submitting' para 'submitted', significa que a mensagem foi enviada
+    if (status === 'submitted') {
+      // Aguardar um pouco para dar tempo da API processar antes de verificar novamente
+      const timer = setTimeout(() => {
+        // Verificar se tinha apenas 1 consulta restante (última consulta)
+        if (ultimaConsulta) {
+          // Verificar imediatamente para atualizar os estados (especialmente planoAtingido)
+          verificarConsulta().then(() => {
+            // Se era a última consulta, interromper o processamento após verificação
+            if (status === 'submitted') {
+              stop();
+            }
+          });
+        } else {
+          verificarConsulta();
+        }
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [status, verificarConsulta, ultimaConsulta, stop]);
 
   const adjustHeight = () => {
     if (textareaRef.current) {
@@ -96,14 +129,32 @@ function PureMultimodalInput({
   const submitForm = useCallback(() => {
     window.history.replaceState({}, '', `/chat/${chatId}`);
 
+    // Se for a última consulta disponível, verificar logo após o envio
+    const isLastQuery = ultimaConsulta;
+
     handleSubmit(undefined);
     setLocalStorageInput('');
     resetHeight();
 
+    // Se for a última consulta, verificar imediatamente para atualizar o estado
+    if (isLastQuery) {
+      // Pequeno timeout para dar tempo do servidor processar
+      setTimeout(() => {
+        verificarConsulta();
+      }, 500);
+    }
+
     if (width && width > 768) {
       textareaRef.current?.focus();
     }
-  }, [handleSubmit, setLocalStorageInput, width, chatId]);
+  }, [
+    handleSubmit,
+    setLocalStorageInput,
+    width,
+    chatId,
+    ultimaConsulta,
+    verificarConsulta,
+  ]);
 
   return (
     <div className="relative w-full flex flex-col gap-4">
@@ -131,6 +182,14 @@ function PureMultimodalInput({
           ) {
             event.preventDefault();
 
+            // Se o plano já atingiu o limite, mostrar mensagem adequada
+            if (planoAtingido) {
+              toast.error(
+                'Limite de consultas atingido. Considere atualizar seu plano para continuar.',
+              );
+              return;
+            }
+
             if (status !== 'ready') {
               toast.error(
                 'Por favor, aguarde o modelo finalizar sua resposta!',
@@ -142,12 +201,43 @@ function PureMultimodalInput({
         }}
       />
 
-      <div className="absolute bottom-0 right-0 p-2 w-fit flex flex-row justify-end">
-        {status === 'submitted' ? (
-          <StopButton stop={stop} setMessages={setMessages} />
-        ) : (
-          <SendButton input={input} submitForm={submitForm} status={status} />
+      <div className="absolute bottom-0 right-0 p-2 w-full flex flex-row justify-between items-center">
+        {(ultimaConsulta || planoAtingido) && (
+          <div
+            className={`ml-2 flex-1 ${planoAtingido ? 'text-red-500' : 'text-amber-500'} text-sm font-medium flex items-center`}
+          >
+            {planoAtingido ? (
+              <span className="flex-1">
+                Você atingiu o limite de consultas do seu plano
+              </span>
+            ) : (
+              <span className="flex-1">
+                Falta apenas 1 consulta no seu plano
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className={`ml-2 ${planoAtingido ? 'border-red-500 hover:bg-red-50 text-red-500' : 'border-amber-500 hover:bg-amber-50 text-amber-500'}`}
+              onClick={() => router.push('/planos?limite=atingido')}
+            >
+              Ajustar plano
+            </Button>
+          </div>
         )}
+
+        <div className="ml-auto">
+          {status === 'submitted' ? (
+            <StopButton stop={stop} setMessages={setMessages} />
+          ) : (
+            <SendButton
+              input={input}
+              submitForm={submitForm}
+              status={status}
+              planoAtingido={planoAtingido}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -190,10 +280,12 @@ function PureSendButton({
   submitForm,
   input,
   status,
+  planoAtingido,
 }: {
   submitForm: () => void;
   input: string;
   status: UseChatHelpers['status'];
+  planoAtingido?: boolean;
 }) {
   return (
     <Button
@@ -201,9 +293,18 @@ function PureSendButton({
       className="rounded-full p-1.5 h-fit border dark:border-zinc-600"
       onClick={(event) => {
         event.preventDefault();
+
+        // Se o plano já atingiu o limite, mostrar mensagem adequada
+        if (planoAtingido) {
+          toast.error(
+            'Limite de consultas atingido. Considere atualizar seu plano para continuar.',
+          );
+          return;
+        }
+
         submitForm();
       }}
-      disabled={input.length === 0 || status !== 'ready'}
+      disabled={input.length === 0 || status !== 'ready' || planoAtingido}
     >
       <ArrowUpIcon size={14} />
     </Button>
@@ -213,5 +314,6 @@ function PureSendButton({
 const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
   if (prevProps.input !== nextProps.input) return false;
   if (prevProps.status !== nextProps.status) return false;
+  if (prevProps.planoAtingido !== nextProps.planoAtingido) return false;
   return true;
 });

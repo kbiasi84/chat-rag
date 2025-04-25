@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { AuthProvider } from '@/components/providers';
 
 export default function PlanosLayout({
   children,
@@ -8,7 +9,7 @@ export default function PlanosLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <AuthProvider>
       <header className="border-b py-4">
         <div className="container flex items-center gap-4">
           <Link href="/configuracoes?tab=cobranca">
@@ -21,6 +22,6 @@ export default function PlanosLayout({
         </div>
       </header>
       <main>{children}</main>
-    </>
+    </AuthProvider>
   );
 }

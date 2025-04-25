@@ -135,18 +135,29 @@ export async function createStripePortal(userId: string, returnUrl: string) {
  */
 export async function verificarLimiteConsulta(userId: string) {
   try {
-    const podeConsultar = await checkConsultaDisponivel(userId);
+    // Obter dados detalhados da assinatura
+    const subscriptionData = await getSubscriptionData(userId);
+
+    // Verificar se pode consultar
+    const podeConsultar = subscriptionData.consultasRestantes > 0;
 
     if (!podeConsultar) {
       return {
         permitido: false,
         mensagem: 'Você atingiu o limite de consultas do seu plano atual',
-        redirecionarParaPlanos: true,
+        redirecionarParaPlanos: false,
+        consultasRestantes: 0,
+        plano: subscriptionData.plano,
+        limiteConsultas: subscriptionData.limiteConsultas,
       };
     }
 
     return {
       permitido: true,
+      consultasRestantes: subscriptionData.consultasRestantes,
+      consultasUsadas: subscriptionData.consultasUsadas,
+      plano: subscriptionData.plano,
+      limiteConsultas: subscriptionData.limiteConsultas,
     };
   } catch (error) {
     console.error('Erro ao verificar limite de consultas:', error);

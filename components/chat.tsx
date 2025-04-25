@@ -13,6 +13,7 @@ import type { VisibilityType } from './visibility-selector';
 import { toast } from 'sonner';
 import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from './sidebar-history';
+import { useQueryLimit } from './query-limit-provider';
 
 export function Chat({
   id,
@@ -28,6 +29,7 @@ export function Chat({
   isReadonly: boolean;
 }) {
   const { mutate } = useSWRConfig();
+  const { verificarConsulta } = useQueryLimit();
 
   const {
     messages,
@@ -49,7 +51,23 @@ export function Chat({
     onFinish: () => {
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
-    onError: () => {
+    onError: (error) => {
+      // Verificar se é um erro de limite de consultas
+      if (error.message && typeof error.message === 'string') {
+        // Se contiver informação sobre limite, atualizar o estado do provider
+        if (
+          error.message.includes('Limite de consultas atingido') ||
+          error.message.includes('limite de consultas')
+        ) {
+          // Chamar verificarConsulta para atualizar o estado no provider
+          verificarConsulta();
+
+          // Não exibir toast aqui, pois já está sendo exibido no QueryLimitProvider
+          return;
+        }
+      }
+
+      // Para outros erros, manter o comportamento padrão
       toast.error('Ocorreu um erro, tente novamente!');
     },
   });

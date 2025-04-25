@@ -12,7 +12,9 @@ import {
   getChatById,
   saveChat,
   saveMessages,
+  incrementConsultasUsadas,
 } from '@/lib/db/queries';
+import { verificarLimiteConsulta } from '@/lib/actions/subscription';
 import {
   generateUUID,
   getMostRecentUserMessage,
@@ -52,6 +54,22 @@ export async function POST(request: Request) {
     if (!userMessage) {
       return Response.json({ error: 'No user message found' }, { status: 400 });
     }
+
+    const resultado = await verificarLimiteConsulta(session.user.id);
+    if (!resultado.permitido) {
+      return Response.json(
+        {
+          error: 'Limite de consultas atingido',
+          mensagem: resultado.mensagem,
+          redirecionarParaPlanos: false,
+          consultasRestantes: resultado.consultasRestantes,
+          plano: resultado.plano,
+        },
+        { status: 403 },
+      );
+    }
+
+    await incrementConsultasUsadas(session.user.id);
 
     const chat = await getChatById({ id });
 

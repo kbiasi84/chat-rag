@@ -8,8 +8,10 @@ import { toast } from 'sonner';
 interface QueryLimitContextType {
   isLoading: boolean;
   isAllowed: boolean;
+  consultasRestantes: number;
+  ultimaConsulta: boolean;
+  planoAtingido: boolean;
   verificarConsulta: () => Promise<boolean>;
-  incrementarConsulta: () => Promise<void>;
 }
 
 const QueryLimitContext = createContext<QueryLimitContextType | undefined>(
@@ -33,6 +35,10 @@ interface QueryLimitProviderProps {
 export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isAllowed, setIsAllowed] = useState(false);
+  const [consultasRestantes, setConsultasRestantes] = useState(-1); // -1 indica que não foi carregado ainda
+  const [ultimaConsulta, setUltimaConsulta] = useState(false); // Flag para última consulta
+  const [planoAtingido, setPlanoAtingido] = useState(false); // Flag para plano atingido
+
   const router = useRouter();
 
   const verificarConsulta = async (): Promise<boolean> => {
@@ -56,15 +62,34 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
 
       const resultado = await response.json();
 
+      // Capturar o estado anterior antes de atualizar
+      const limiteAtingidoAntes = planoAtingido;
+
       setIsAllowed(resultado.permitido);
 
-      if (!resultado.permitido && resultado.redirecionarParaPlanos) {
+      // Verificar se retornou informações sobre consultas restantes
+      if (resultado.consultasRestantes !== undefined) {
+        setConsultasRestantes(resultado.consultasRestantes);
+
+        // Verifica se é a última consulta disponível (apenas 1 restante)
+        setUltimaConsulta(resultado.consultasRestantes === 1);
+
+        // Verifica se o plano atingiu o limite (0 restantes)
+        setPlanoAtingido(resultado.consultasRestantes === 0);
+      }
+
+      // Mostrar aviso somente se já estávamos com limite atingido antes desta verificação
+      // Isso evita mostrar o toast quando o usuário está enviando a última consulta disponível
+      if (!resultado.permitido && limiteAtingidoAntes) {
         toast.error(
-          resultado.mensagem ||
-            'Você atingiu o limite de consultas do seu plano',
+          'Limite de consultas atingido. Considere atualizar seu plano para continuar.',
         );
 
-        router.push('/planos?limite=atingido');
+        // Remover o redirecionamento automático
+        // if (resultado.redirecionarParaPlanos) {
+        //   router.push('/planos?limite=atingido');
+        // }
+
         return false;
       }
 
@@ -79,33 +104,6 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
     }
   };
 
-  const incrementarConsulta = async (): Promise<void> => {
-    try {
-      const response = await fetch('/api/consultas/incrementar', {
-        method: 'POST',
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-
-        if (response.status === 403 && data.redirecionarParaPlanos) {
-          toast.error(
-            data.mensagem || 'Você atingiu o limite de consultas do seu plano',
-          );
-
-          router.push('/planos?limite=atingido');
-        } else {
-          toast.error(
-            data.error || 'Erro ao incrementar contador de consultas',
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao incrementar contador:', error);
-      toast.error('Não foi possível atualizar seu contador de consultas');
-    }
-  };
-
   useEffect(() => {
     verificarConsulta();
   }, []);
@@ -115,8 +113,10 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
       value={{
         isLoading,
         isAllowed,
+        consultasRestantes,
+        ultimaConsulta,
+        planoAtingido,
         verificarConsulta,
-        incrementarConsulta,
       }}
     >
       {children}
