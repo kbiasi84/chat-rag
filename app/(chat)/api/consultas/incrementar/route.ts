@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server';
 import { incrementConsultasUsadas } from '@/lib/db/queries';
 import { verificarLimiteConsulta } from '@/lib/actions/subscription';
 
+// Forçar o uso do ambiente Node.js completo
+export const runtime = 'nodejs';
+
 export async function POST() {
   try {
     const session = await auth();
