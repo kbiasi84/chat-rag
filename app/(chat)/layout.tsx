@@ -1,11 +1,11 @@
 import { cookies } from 'next/headers';
 
-import { AppSidebar } from '@/components/app-sidebar';
+import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { auth } from '../(auth)/auth';
 import Script from 'next/script';
-import { AuthProvider } from '@/components/providers';
-import { QueryLimitProvider } from '@/components/query-limit-provider';
+import { AuthProvider } from '@/components/auth/providers';
+import { QueryLimitProvider } from '@/components/providers/query-limit-provider';
 
 export const experimental_ppr = true;
 

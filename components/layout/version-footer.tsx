@@ -9,8 +9,8 @@ import { useWindowSize } from 'usehooks-ts';
 import type { Document } from '@/lib/db/schema';
 import { getDocumentTimestampByIndex } from '@/lib/utils';
 
-import { LoaderIcon } from './icons';
-import { Button } from './ui/button';
+import { LoaderIcon } from '../common/icons';
+import { Button } from '../ui/button';
 
 interface VersionFooterProps {
   handleVersionChange: (type: 'next' | 'prev' | 'toggle' | 'latest') => void;

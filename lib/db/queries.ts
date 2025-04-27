@@ -25,7 +25,9 @@ import {
   PLANOS,
   LIMITES_CONSULTA,
 } from './schema';
-import type { ArtifactKind } from '@/components/artifact';
+
+// Definindo o tipo ArtifactKind localmente
+type ArtifactKind = 'text' | 'code' | 'image' | 'sheet';
 
 // biome-ignore lint: Forbidden non-null assertion.
 const client = postgres(process.env.POSTGRES_URL!);

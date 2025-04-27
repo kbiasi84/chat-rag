@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
-import { toast } from '@/components/toast';
+import { toast } from '@/components/common/toast';
 
-import { AuthForm } from '@/components/formulario-login';
-import { SubmitButton } from '@/components/submit-button';
+import { AuthForm } from '@/components/auth/login-form';
+import { SubmitButton } from '@/components/auth/submit-button';
 
 import { login, type LoginActionState } from '../actions';
 
@@ -51,13 +51,13 @@ export default function Page() {
         <div className="flex flex-col items-center justify-center gap-2 px-4 text-center sm:px-16">
           <h3 className="text-xl font-semibold dark:text-zinc-50">Entrar</h3>
           <p className="text-sm text-gray-500 dark:text-zinc-400">
-          Use seu e-mail e senha para entrar
+            Use seu e-mail e senha para entrar
           </p>
         </div>
         <AuthForm action={handleSubmit} defaultEmail={email}>
           <SubmitButton isSuccessful={isSuccessful}>Entrar</SubmitButton>
           <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
-            {"Ainda não te muma conta? "}
+            {'Ainda não te muma conta? '}
             <Link
               href="/register"
               className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"

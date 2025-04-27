@@ -13,12 +13,12 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
-import { useQueryLimit } from './query-limit-provider';
+import { useQueryLimit } from '../providers/query-limit-provider';
 import { useRouter } from 'next/navigation';
 
-import { ArrowUpIcon, StopIcon } from './icons';
-import { Button } from './ui/button';
-import { Textarea } from './ui/textarea';
+import { ArrowUpIcon, StopIcon } from '../common/icons';
+import { Button } from '../ui/button';
+import { Textarea } from '../ui/textarea';
 import { SuggestedActions } from './suggested-actions';
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';

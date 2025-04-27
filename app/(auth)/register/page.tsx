@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
-import { toast } from '@/components/toast';
+import { toast } from '@/components/common/toast';
 
-import { FormularioRegistro } from '@/components/formulario-registro';
-import { SubmitButton } from '@/components/submit-button';
+import { FormularioRegistro } from '@/components/auth/register-form';
+import { SubmitButton } from '@/components/auth/submit-button';
 
 import { register, type RegisterActionState } from '../actions';
 

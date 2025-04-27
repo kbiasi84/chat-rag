@@ -1,7 +1,7 @@
 // app/configuracoes/layout.tsx
 import { redirect } from 'next/navigation';
 import { auth } from '@/app/(auth)/auth';
-import { AuthProvider } from '@/components/providers';
+import { AuthProvider } from '@/components/auth/providers';
 
 export default async function ConfiguracoesLayout({
   children,

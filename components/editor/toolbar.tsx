@@ -11,7 +11,7 @@ import {
 import {
   type Dispatch,
   memo,
-  ReactNode,
+  type ReactNode,
   type SetStateAction,
   useEffect,
   useRef,
@@ -26,10 +26,99 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-import { ArrowUpIcon, StopIcon, SummarizeIcon } from './icons';
-import { artifactDefinitions, ArtifactKind } from './artifact';
-import { ArtifactToolbarItem } from './create-artifact';
-import { UseChatHelpers } from '@ai-sdk/react';
+import {
+  ArrowUpIcon,
+  StopIcon,
+  SummarizeIcon,
+} from '@/components/common/icons';
+import type { UseChatHelpers } from '@ai-sdk/react';
+
+// Definições dos tipos que foram removidos
+type ArtifactKind = 'text' | 'code' | 'image' | 'sheet';
+
+// Tipo para o callback onClick
+type OnClickCallback = (params: {
+  appendMessage: UseChatHelpers['append'];
+}) => void;
+
+interface ArtifactToolbarItem {
+  description: string;
+  icon: ReactNode;
+  onClick: OnClickCallback;
+}
+
+interface ArtifactDefinition {
+  kind: ArtifactKind;
+  toolbar: ArtifactToolbarItem[];
+}
+
+// Definição temporária até que seja reimplementada corretamente
+const artifactDefinitions: ArtifactDefinition[] = [
+  {
+    kind: 'text',
+    toolbar: [
+      {
+        description: 'Resumir',
+        icon: <SummarizeIcon />,
+        onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
+          const { appendMessage } = params;
+          appendMessage({
+            role: 'user',
+            content: 'Por favor, resuma este texto.',
+          });
+        },
+      },
+    ],
+  },
+  {
+    kind: 'code',
+    toolbar: [
+      {
+        description: 'Executar código',
+        icon: <ArrowUpIcon />,
+        onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
+          const { appendMessage } = params;
+          appendMessage({
+            role: 'user',
+            content: 'Por favor, execute este código.',
+          });
+        },
+      },
+    ],
+  },
+  {
+    kind: 'image',
+    toolbar: [
+      {
+        description: 'Descrever imagem',
+        icon: <SummarizeIcon />,
+        onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
+          const { appendMessage } = params;
+          appendMessage({
+            role: 'user',
+            content: 'Por favor, descreva esta imagem.',
+          });
+        },
+      },
+    ],
+  },
+  {
+    kind: 'sheet',
+    toolbar: [
+      {
+        description: 'Analisar dados',
+        icon: <SummarizeIcon />,
+        onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
+          const { appendMessage } = params;
+          appendMessage({
+            role: 'user',
+            content: 'Por favor, analise estes dados.',
+          });
+        },
+      },
+    ],
+  },
+];
 
 type ToolProps = {
   description: string;
@@ -40,11 +129,7 @@ type ToolProps = {
   setIsToolbarVisible?: Dispatch<SetStateAction<boolean>>;
   isAnimating: boolean;
   append: UseChatHelpers['append'];
-  onClick: ({
-    appendMessage,
-  }: {
-    appendMessage: UseChatHelpers['append'];
-  }) => void;
+  onClick: OnClickCallback;
 };
 
 const Tool = ({
@@ -356,7 +441,7 @@ const PureToolbar = ({
   }, [status, setIsToolbarVisible]);
 
   const artifactDefinition = artifactDefinitions.find(
-    (definition) => definition.kind === artifactKind,
+    (definition: ArtifactDefinition) => definition.kind === artifactKind,
   );
 
   if (!artifactDefinition) {

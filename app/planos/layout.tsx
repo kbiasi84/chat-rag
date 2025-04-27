@@ -1,7 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { AuthProvider } from '@/components/providers';
+import { AuthProvider } from '@/components/auth/providers';
 
 export default function PlanosLayout({
   children,

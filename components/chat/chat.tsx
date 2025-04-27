@@ -4,7 +4,7 @@ import type { Attachment, UIMessage } from 'ai';
 import { useChat } from '@ai-sdk/react';
 import { useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import { ChatHeader } from '@/components/chat-header';
+import { ChatHeader } from '@/components/chat/chat-header';
 import type { Vote } from '@/lib/db/schema';
 import { fetcher, generateUUID } from '@/lib/utils';
 import { MultimodalInput } from './multimodal-input';
@@ -12,8 +12,8 @@ import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
 import { toast } from 'sonner';
 import { unstable_serialize } from 'swr/infinite';
-import { getChatHistoryPaginationKey } from './sidebar-history';
-import { useQueryLimit } from './query-limit-provider';
+import { getChatHistoryPaginationKey } from '@/components/sidebar/sidebar-history';
+import { useQueryLimit } from '../providers/query-limit-provider';
 
 export function Chat({
   id,

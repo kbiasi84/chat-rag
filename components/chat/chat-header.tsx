@@ -3,15 +3,27 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useWindowSize } from 'usehooks-ts';
+import { MoreHorizontalIcon, MessageSquareIcon } from 'lucide-react';
+import { forwardRef } from 'react';
+import { ChatConfig } from '@/lib/chat/types';
+import { Tooltip } from '@/components/ui/tooltip';
+import { useAppDispatch, useAppSelector } from '@/lib/hooks/redux';
+import { chatActions } from '@/lib/redux/slices/chat-slice';
+import { ChatThoughtsToggle } from '@/components/chat/chat-thoughts-toggle';
+import { DeleteAllMessagesDialog } from '@/components/chat/delete-all-messages-dialog';
+import { ExportDialog } from '@/components/chat/export-dialog';
+import { UserAvatar } from '@/components/user-avatar';
+import { ShareChatDialog } from '@/components/share-chat-dialog';
+import { VisibilitySelector } from './visibility-selector';
 
-import { ModelSelector } from '@/components/model-selector';
-import { SidebarToggle } from '@/components/sidebar-toggle';
+import { ModelSelector } from '@/components/chat/model-selector';
+import { SidebarToggle } from '@/components/sidebar/sidebar-toggle';
 import { Button } from '@/components/ui/button';
-import { PlusIcon, VercelIcon } from './icons';
-import { useSidebar } from './ui/sidebar';
+import { PlusIcon, VercelIcon } from '../common/icons';
+import { useSidebar } from '../ui/sidebar';
 import { memo } from 'react';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
-import { type VisibilityType, VisibilitySelector } from './visibility-selector';
+import { TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { type VisibilityType } from '../visibility-selector';
 
 function PureChatHeader({
   chatId,

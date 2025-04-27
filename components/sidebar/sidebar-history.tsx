@@ -24,9 +24,9 @@ import {
 } from '@/components/ui/sidebar';
 import type { Chat } from '@/lib/db/schema';
 import { fetcher } from '@/lib/utils';
-import { ChatItem } from './sidebar-history-item';
+import { ChatItem } from '@/components/sidebar/sidebar-history-item';
 import useSWRInfinite from 'swr/infinite';
-import { LoaderIcon } from './icons';
+import { LoaderIcon } from '@/components/common/icons';
 
 type GroupedChats = {
   today: Chat[];
@@ -259,7 +259,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                     {groupedChats.lastWeek.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-xs text-sidebar-foreground/50">
-                          Últimos 7 dias
+                          Última Semana
                         </div>
                         {groupedChats.lastWeek.map((chat) => (
                           <ChatItem
@@ -279,7 +279,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                     {groupedChats.lastMonth.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-xs text-sidebar-foreground/50">
-                          Últimos 30 dias
+                          Último Mês
                         </div>
                         {groupedChats.lastMonth.map((chat) => (
                           <ChatItem
@@ -299,7 +299,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                     {groupedChats.older.length > 0 && (
                       <div>
                         <div className="px-2 py-1 text-xs text-sidebar-foreground/50">
-                          Mais antigo que 30 dias
+                          Mais Antigos
                         </div>
                         {groupedChats.older.map((chat) => (
                           <ChatItem
@@ -319,37 +319,40 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                 );
               })()}
           </SidebarMenu>
-
-          <motion.div
-            onViewportEnter={() => {
-              if (!isValidating && !hasReachedEnd) {
-                setSize((size) => size + 1);
-              }
-            }}
-          />
-
-          {hasReachedEnd ? (
-            <div className="px-2 text-zinc-500 w-full flex flex-row justify-center items-center text-sm gap-2 mt-8">
-              Você chegou ao fim do seu histórico de bate-papo.
-            </div>
-          ) : (
-            <div className="p-2 text-zinc-500 dark:text-zinc-400 flex flex-row gap-2 items-center mt-8">
-              <div className="animate-spin">
-                <LoaderIcon />
-              </div>
-              <div>Carregando Chats...</div>
-            </div>
-          )}
         </SidebarGroupContent>
       </SidebarGroup>
+
+      {!hasReachedEnd && paginatedChatHistories && (
+        <div className="flex flex-col items-center justify-center py-4">
+          <button
+            type="button"
+            onClick={() => {
+              if (!isValidating) {
+                setSize((currentSize) => currentSize + 1);
+              }
+            }}
+            className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 cursor-pointer"
+            disabled={isValidating}
+          >
+            {isValidating ? (
+              <span className="flex items-center gap-2">
+                <LoaderIcon />
+                Carregando...
+              </span>
+            ) : (
+              'Carregar Mais'
+            )}
+          </button>
+        </div>
+      )}
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+            <AlertDialogTitle>Tem certeza?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. Isso excluirá permanentemente o
-              seu chat e o removerá de nossos servidores.
+              Esta ação não pode ser desfeita. Isso excluirá permanentemente
+              este chat do nosso servidor.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

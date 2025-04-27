@@ -6,10 +6,12 @@ import { useWindowSize } from 'usehooks-ts';
 
 import type { UISuggestion } from '@/lib/editor/suggestions';
 
-import { CrossIcon, MessageIcon } from './icons';
-import { Button } from './ui/button';
+import { CrossIcon, MessageIcon } from '@/components/common/icons';
+import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
-import { ArtifactKind } from './artifact';
+
+// Defining ArtifactKind type directly since we couldn't find the correct import path
+type ArtifactKind = 'text' | 'code' | 'image' | 'sheet';
 
 export const Suggestion = ({
   suggestion,
