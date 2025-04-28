@@ -11,6 +11,7 @@ interface QueryLimitContextType {
   consultasRestantes: number;
   ultimaConsulta: boolean;
   planoAtingido: boolean;
+  assinaturaCancelada: boolean;
   verificarConsulta: () => Promise<boolean>;
 }
 
@@ -38,6 +39,7 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
   const [consultasRestantes, setConsultasRestantes] = useState(-1); // -1 indica que não foi carregado ainda
   const [ultimaConsulta, setUltimaConsulta] = useState(false); // Flag para última consulta
   const [planoAtingido, setPlanoAtingido] = useState(false); // Flag para plano atingido
+  const [assinaturaCancelada, setAssinaturaCancelada] = useState(false); // Flag para assinatura cancelada
 
   const router = useRouter();
 
@@ -67,6 +69,16 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
 
       setIsAllowed(resultado.permitido);
 
+      // Verificar se a assinatura está cancelada
+      if (resultado.statusAssinatura === 'canceled') {
+        setAssinaturaCancelada(true);
+        toast.error(
+          'Sua assinatura foi cancelada. Assine um plano para continuar usando o serviço.',
+        );
+      } else {
+        setAssinaturaCancelada(false);
+      }
+
       // Verificar se retornou informações sobre consultas restantes
       if (resultado.consultasRestantes !== undefined) {
         setConsultasRestantes(resultado.consultasRestantes);
@@ -80,7 +92,7 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
 
       // Mostrar aviso somente se já estávamos com limite atingido antes desta verificação
       // Isso evita mostrar o toast quando o usuário está enviando a última consulta disponível
-      if (!resultado.permitido && limiteAtingidoAntes) {
+      if (!resultado.permitido && limiteAtingidoAntes && !assinaturaCancelada) {
         toast.error(
           'Limite de consultas atingido. Considere atualizar seu plano para continuar.',
         );
@@ -116,6 +128,7 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
         consultasRestantes,
         ultimaConsulta,
         planoAtingido,
+        assinaturaCancelada,
         verificarConsulta,
       }}
     >

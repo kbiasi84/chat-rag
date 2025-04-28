@@ -41,6 +41,7 @@ export const subscription = pgTable('subscription', {
     enum: [
       'active',
       'canceled',
+      'canceled_at_period_end',
       'incomplete',
       'incomplete_expired',
       'past_due',
@@ -75,6 +76,7 @@ export const payment = pgTable('payment', {
     .notNull()
     .references(() => subscription.id),
   stripeInvoiceId: varchar('stripe_invoice_id', { length: 255 }),
+  invoiceUrl: varchar('invoice_url', { length: 500 }),
   valor: integer('valor').notNull(), // em centavos
   status: varchar('status', {
     enum: ['paid', 'pending', 'failed'],

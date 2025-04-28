@@ -68,7 +68,7 @@ export async function createUser(
   whatsapp: string,
   atividade: string,
   senha: string,
-  perfil: string = 'usuario', // Valor padrão, se não for fornecido
+  perfil = 'usuario', // Valor padrão, se não for fornecido
 ): Promise<string> {
   const salt = genSaltSync(10);
   const hash = hashSync(senha, salt);
@@ -584,7 +584,7 @@ export async function updateSubscription(
  */
 export async function upsertSubscription(
   userId: string,
-  plano: keyof typeof PLANOS,
+  plano: (typeof PLANOS)[keyof typeof PLANOS],
   stripeCustomerId: string,
   stripeSubscriptionId: string,
   status: Subscription['status'] = 'active',
@@ -596,7 +596,7 @@ export async function upsertSubscription(
 
     if (existingSubscription) {
       // Verificar se o plano mudou
-      const planChanged = existingSubscription.plano !== plano;
+      const planChanged = existingSubscription.plano !== plano.toLowerCase();
 
       // Atualizar a assinatura existente
       await db
@@ -713,6 +713,7 @@ export async function createPayment(
   status: Payment['status'],
   stripeInvoiceId?: string,
   dataPagamento?: Date,
+  invoiceUrl?: string,
 ) {
   try {
     await db.insert(payment).values({
@@ -722,6 +723,7 @@ export async function createPayment(
       status,
       stripeInvoiceId,
       dataPagamento,
+      invoiceUrl,
     });
   } catch (error) {
     console.error('Falha ao registrar pagamento:', error);
@@ -732,13 +734,17 @@ export async function createPayment(
 /**
  * Obtém o histórico de pagamentos de um usuário
  */
-export async function getUserPayments(userId: string): Promise<Payment[]> {
+export async function getUserPayments(
+  userId: string,
+  limite = 5,
+): Promise<Payment[]> {
   try {
     return await db
       .select()
       .from(payment)
       .where(eq(payment.userId, userId))
-      .orderBy(desc(payment.criadoEm));
+      .orderBy(desc(payment.criadoEm))
+      .limit(limite);
   } catch (error) {
     console.error('Falha ao buscar histórico de pagamentos:', error);
     throw new Error('Não foi possível buscar o histórico de pagamentos');
@@ -746,78 +752,22 @@ export async function getUserPayments(userId: string): Promise<Payment[]> {
 }
 
 /**
- * Cancelar assinaturas antigas do mesmo usuário
- * Mantém apenas a assinatura mais recente ativa
+ * Busca uma assinatura pelo ID do cliente do Stripe
  */
-export async function cancelarAssinaturasAntigas(
-  userId: string,
-  currentStripeSubscriptionId: string,
-) {
+export async function getUserByStripeCustomerId(
+  stripeCustomerId: string,
+): Promise<Subscription | null> {
   try {
-    console.log(`Cancelando assinaturas antigas para o usuário ${userId}`);
-    console.log(`Preservando assinatura atual: ${currentStripeSubscriptionId}`);
-
-    // 1. Buscar todas as assinaturas do usuário no banco de dados
-    const assinaturas = await db
+    const result = await db
       .select()
       .from(subscription)
-      .where(eq(subscription.userId, userId))
-      .orderBy(desc(subscription.criadoEm));
+      .where(eq(subscription.stripeCustomerId, stripeCustomerId))
+      .orderBy(desc(subscription.criadoEm))
+      .limit(1);
 
-    console.log(
-      `Encontradas ${assinaturas.length} assinaturas para este usuário`,
-    );
-
-    // 2. Marcar como "canceled" todas as assinaturas que não sejam a atual
-    for (const assinatura of assinaturas) {
-      // Pular a assinatura atual
-      if (assinatura.stripeSubscriptionId === currentStripeSubscriptionId) {
-        console.log(`Mantendo assinatura atual: ${assinatura.id}`);
-        continue;
-      }
-
-      // Verificar se já está cancelada
-      if (assinatura.status === 'canceled') {
-        console.log(`Assinatura ${assinatura.id} já está cancelada`);
-        continue;
-      }
-
-      console.log(
-        `Cancelando assinatura ${assinatura.id} (${assinatura.stripeSubscriptionId})`,
-      );
-
-      // Atualizar no banco de dados
-      await db
-        .update(subscription)
-        .set({
-          status: 'canceled',
-          atualizadoEm: new Date(),
-        })
-        .where(eq(subscription.id, assinatura.id));
-
-      // Se tem um ID de assinatura do Stripe, cancelar no Stripe também
-      if (assinatura.stripeSubscriptionId) {
-        try {
-          // Importar o Stripe de forma dinâmica para evitar dependência circular
-          const { stripe } = await import('@/lib/stripe');
-
-          await stripe.subscriptions.cancel(assinatura.stripeSubscriptionId);
-          console.log(
-            `Assinatura do Stripe ${assinatura.stripeSubscriptionId} cancelada com sucesso`,
-          );
-        } catch (stripeError) {
-          console.error(
-            `Erro ao cancelar assinatura no Stripe: ${assinatura.stripeSubscriptionId}`,
-            stripeError,
-          );
-          // Continuar mesmo com erro do Stripe - pelo menos atualizamos no banco
-        }
-      }
-    }
-
-    console.log('Processo de cancelamento de assinaturas antigas concluído');
+    return result.length > 0 ? result[0] : null;
   } catch (error) {
-    console.error('Erro ao cancelar assinaturas antigas:', error);
-    throw new Error('Não foi possível cancelar assinaturas antigas');
+    console.error('Falha ao buscar usuário pelo ID do cliente Stripe:', error);
+    throw new Error('Não foi possível encontrar o usuário');
   }
 }

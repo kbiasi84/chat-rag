@@ -1,0 +1,1 @@
+ALTER TABLE "payment" ADD COLUMN "invoice_url" varchar(500);

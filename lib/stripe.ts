@@ -88,31 +88,113 @@ export async function createCheckoutSession(
 export async function createBillingPortalSession(
   customerId: string,
   returnUrl: string,
+  options?: any,
 ) {
+  console.log('[DEBUG - STRIPE] Iniciando createBillingPortalSession:', {
+    customerId,
+    returnUrl,
+  });
   try {
-    const session = await stripe.billingPortal.sessions.create({
+    // Configurações básicas do portal
+    const sessionConfig: any = {
       customer: customerId,
       return_url: returnUrl,
-    });
+    };
 
-    return session;
+    // Adicionar quaisquer opções personalizadas, se fornecidas
+    if (options?.flow_data) {
+      sessionConfig.flow_data = options.flow_data;
+    }
+
+    console.log(
+      '[DEBUG - STRIPE] Configuração da sessão:',
+      JSON.stringify(sessionConfig, null, 2),
+    );
+
+    try {
+      console.log(
+        '[DEBUG - STRIPE] Chamando stripe.billingPortal.sessions.create',
+      );
+      const session = await stripe.billingPortal.sessions.create(sessionConfig);
+      console.log('[DEBUG - STRIPE] Portal criado com sucesso:', {
+        url: session.url,
+        id: session.id,
+        object: session.object,
+        created: session.created,
+      });
+      return session;
+    } catch (error: any) {
+      // Capturar e propagar o erro com mais detalhes
+      console.error(
+        '[ERROR - STRIPE] Erro específico do Stripe ao criar portal:',
+        {
+          message: error.message,
+          type: error.type,
+          code: error.code,
+          statusCode: error.statusCode,
+          requestId: error.requestId,
+          headers: error.headers,
+          rawType: error.rawType,
+          param: error.param,
+        },
+      );
+
+      // Tentar extrair mais detalhes do erro
+      if (error.raw) {
+        console.error(
+          '[ERROR - STRIPE] Detalhes adicionais do erro:',
+          error.raw,
+        );
+      }
+
+      // Se for um erro de configuração do portal, propagar com detalhes para tratamento
+      if (
+        error.message?.includes('No configuration provided') ||
+        error.message?.includes('customer portal settings')
+      ) {
+        console.log(
+          '[DEBUG - STRIPE] Erro de configuração do portal detectado',
+        );
+        error.configError = true;
+        error.configUrl =
+          'https://dashboard.stripe.com/test/settings/billing/portal';
+      }
+
+      throw error;
+    }
   } catch (error) {
-    console.error('Erro ao criar portal de cobrança:', error);
-    throw new Error('Falha ao acessar portal de cobrança');
+    console.error(
+      '[ERROR - STRIPE] Erro geral ao criar portal de cobrança:',
+      error,
+    );
+    throw error; // Propagar o erro para tratamento na camada de serviço
   }
 }
 
 /**
  * Cancela uma assinatura do Stripe
  */
-export async function cancelStripeSubscription(subscriptionId: string) {
+export async function cancelStripeSubscription(
+  subscriptionId: string,
+  cancelAtPeriodEnd: boolean = false,
+) {
   try {
-    const canceledSubscription =
-      await stripe.subscriptions.cancel(subscriptionId);
+    let canceledSubscription;
+
+    if (cancelAtPeriodEnd) {
+      // Cancelar no final do período atual
+      canceledSubscription = await stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: true,
+      });
+    } else {
+      // Cancelar imediatamente
+      canceledSubscription = await stripe.subscriptions.cancel(subscriptionId);
+    }
 
     return {
       success: true,
       status: canceledSubscription.status,
+      cancelAtPeriodEnd: cancelAtPeriodEnd ? true : false,
       canceledAt: canceledSubscription.canceled_at
         ? new Date(canceledSubscription.canceled_at * 1000)
         : new Date(),
@@ -120,5 +202,27 @@ export async function cancelStripeSubscription(subscriptionId: string) {
   } catch (error) {
     console.error('Erro ao cancelar assinatura no Stripe:', error);
     throw new Error('Falha ao cancelar assinatura');
+  }
+}
+
+/**
+ * Reativa uma assinatura do Stripe cancelada no final do período
+ */
+export async function reactivateStripeSubscription(subscriptionId: string) {
+  try {
+    const reactivatedSubscription = await stripe.subscriptions.update(
+      subscriptionId,
+      {
+        cancel_at_period_end: false,
+      },
+    );
+
+    return {
+      success: true,
+      status: reactivatedSubscription.status,
+    };
+  } catch (error) {
+    console.error('Erro ao reativar assinatura no Stripe:', error);
+    throw new Error('Falha ao reativar assinatura');
   }
 }

@@ -28,7 +28,7 @@ export default function PlanosPage() {
         if (session?.user?.id) {
           setLoading(true);
           const data = await getSubscriptionData(session.user.id);
-          setPlanoAtual(data.plano);
+          setPlanoAtual(data.status === 'canceled' ? null : data.plano);
         }
       } catch (error) {
         console.error('Erro ao buscar assinatura:', error);
@@ -46,7 +46,7 @@ export default function PlanosPage() {
   // Lidar com a seleção de plano
   const handleSelectPlan = async (plano: keyof typeof PLANOS) => {
     try {
-      // Se já é o plano atual, não fazer nada
+      // Se já é o plano atual e não está cancelado, não fazer nada
       if (plano === planoAtual) {
         router.push('/configuracoes?tab=cobranca');
         return;
@@ -59,7 +59,7 @@ export default function PlanosPage() {
 
       setButtonLoading(plano);
 
-      // Se está no plano gratuito e quer fazer upgrade, criar checkout
+      // Criar checkout para o plano selecionado
       const { url } = await createStripeCheckout(
         session.user.id,
         session.user.email,
@@ -84,7 +84,8 @@ export default function PlanosPage() {
   const getButtonText = (plano: string) => {
     if (loading || !session?.user) return 'Carregando...';
     if (isCurrentPlan(plano)) return 'Plano Atual';
-    if (planoAtual === PLANOS.FREE) return 'Assinar Agora';
+    if (planoAtual === null || planoAtual === PLANOS.FREE)
+      return 'Assinar Agora';
     if (plano === PLANOS.FREE) return 'Fazer Downgrade';
     return planoAtual === PLANOS.ENTERPRISE
       ? 'Fazer Downgrade'

@@ -14,17 +14,29 @@ import {
   getSubscriptionData,
   createStripePortal,
   cancelarAssinatura,
+  reativarAssinatura,
 } from '@/lib/actions/subscription';
 import { PLANOS, LIMITES_CONSULTA } from '@/lib/db/schema/subscription';
+
+// Interface para informações do cartão
+interface CardInfo {
+  brand: string;
+  last4: string;
+  exp_month?: number;
+  exp_year?: number;
+}
 
 export default function CobrancaContent() {
   const router = useRouter();
   const { data: session } = useSession();
   const [loading, setLoading] = useState(true);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [cardLoading, setCardLoading] = useState(false);
   const [subscriptionData, setSubscriptionData] = useState<any>(null);
+  const [cardInfo, setCardInfo] = useState<CardInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [reactivateLoading, setReactivateLoading] = useState(false);
 
   // Função para formatar a data
   const formatDate = (date: string | Date | null) => {
@@ -40,6 +52,11 @@ export default function CobrancaContent() {
         if (session?.user?.id) {
           const data = await getSubscriptionData(session.user.id);
           setSubscriptionData(data);
+
+          // Se tem assinatura paga, buscar dados do cartão
+          if (data?.plano !== PLANOS.FREE && data?.stripeCustomerId) {
+            await fetchCardInfo();
+          }
         }
       } catch (error) {
         console.error('Erro ao buscar assinatura:', error);
@@ -54,39 +71,72 @@ export default function CobrancaContent() {
     }
   }, [session]);
 
+  // Função para buscar informações do cartão
+  async function fetchCardInfo() {
+    try {
+      if (!session?.user?.id) return;
+
+      setCardLoading(true);
+      const response = await fetch(`/api/pagamento?userId=${session.user.id}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setCardInfo(data);
+      } else {
+        console.log('Cartão não encontrado ou erro ao buscar dados do cartão');
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados do cartão:', err);
+    } finally {
+      setCardLoading(false);
+    }
+  }
+
   // Abrir o portal de gerenciamento de assinatura do Stripe
   const handleAtualizarPagamento = async () => {
+    console.log('[DEBUG] Iniciando processo de atualização de pagamento');
     try {
       setPortalLoading(true);
       if (!session?.user?.id) {
+        console.log('[ERROR] Usuário não autenticado');
         throw new Error('Usuário não autenticado');
       }
+
+      console.log('[DEBUG] Chamando createStripePortal com:', {
+        userId: session.user.id,
+        returnUrl: `${window.location.origin}/configuracoes?tab=cobranca`,
+        flow: 'payment_method_update',
+      });
 
       const result = await createStripePortal(
         session.user.id,
         `${window.location.origin}/configuracoes?tab=cobranca`,
+        'payment_method_update', // Especificando o fluxo para atualização de método de pagamento
       );
+
+      console.log('[DEBUG] Resultado do createStripePortal:', result);
 
       // Verificar se temos um erro de configuração
       if (result.configError) {
-        setError(result.message || 'Portal de cobrança não configurado');
-
-        // Para ambiente de desenvolvimento, podemos abrir a página de configuração
-        if (
-          confirm(
-            'O Portal de Cobrança do Stripe não está configurado. Deseja abrir a página de configuração do Stripe?',
-          )
-        ) {
-          window.open(result.url, '_blank');
-        }
+        console.log('[ERROR] Erro de configuração do portal:', result);
+        setError(
+          'Portal de cobrança não configurado. Entre em contato com o suporte.',
+        );
         return;
       }
+
+      // Log da URL antes de redirecionar
+      console.log('[DEBUG] Redirecionando para URL do portal:', result.url);
 
       // Redirecionar para o portal do Stripe
       window.location.href = result.url;
     } catch (error) {
-      console.error('Erro ao abrir portal de pagamento:', error);
-      setError('Não foi possível acessar o gerenciamento de pagamento');
+      console.error('[ERROR] Erro ao abrir portal de pagamento:', error);
+
+      // Exibir mensagem amigável
+      setError(
+        'Não foi possível acessar o portal de pagamento neste momento. Por favor, tente novamente mais tarde ou entre em contato com o suporte.',
+      );
     } finally {
       setPortalLoading(false);
     }
@@ -97,7 +147,7 @@ export default function CobrancaContent() {
     // Confirmar com o usuário
     if (
       !confirm(
-        'Tem certeza que deseja cancelar sua assinatura? Isso não poderá ser desfeito.',
+        'Tem certeza que deseja cancelar sua assinatura? Sua assinatura permanecerá ativa até o final do período atual.',
       )
     ) {
       return;
@@ -109,6 +159,7 @@ export default function CobrancaContent() {
         throw new Error('Usuário não autenticado');
       }
 
+      // Agora o cancelamento é feito no final do período (padrão)
       const result = await cancelarAssinatura(session.user.id);
 
       // Atualizar dados da assinatura após cancelamento
@@ -116,7 +167,7 @@ export default function CobrancaContent() {
       setSubscriptionData(data);
 
       // Mostrar confirmação
-      alert('Sua assinatura foi cancelada com sucesso.');
+      alert('Sua assinatura será cancelada ao final do período atual.');
     } catch (error) {
       console.error('Erro ao cancelar assinatura:', error);
       setError(
@@ -124,6 +175,32 @@ export default function CobrancaContent() {
       );
     } finally {
       setCancelLoading(false);
+    }
+  };
+
+  // Função para reativar assinatura
+  const handleReassinar = async () => {
+    try {
+      setReactivateLoading(true);
+      if (!session?.user?.id) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      const result = await reativarAssinatura(session.user.id);
+
+      // Atualizar dados da assinatura após reativação
+      const data = await getSubscriptionData(session.user.id);
+      setSubscriptionData(data);
+
+      // Mostrar confirmação
+      alert('Sua assinatura foi reativada com sucesso.');
+    } catch (error) {
+      console.error('Erro ao reativar assinatura:', error);
+      setError(
+        'Não foi possível reativar sua assinatura. Por favor, tente novamente.',
+      );
+    } finally {
+      setReactivateLoading(false);
     }
   };
 
@@ -139,7 +216,7 @@ export default function CobrancaContent() {
         </div>
 
         <div className="flex justify-center items-center h-40">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
       </div>
     );
@@ -184,6 +261,24 @@ export default function CobrancaContent() {
     }
   };
 
+  // Formatar nome da bandeira do cartão
+  const formatBrand = (brand: string) => {
+    const brandMap: Record<string, string> = {
+      visa: 'Visa',
+      mastercard: 'Mastercard',
+      amex: 'American Express',
+      discover: 'Discover',
+      jcb: 'JCB',
+      diners: 'Diners Club',
+      unionpay: 'UnionPay',
+    };
+
+    return (
+      brandMap[brand.toLowerCase()] ||
+      brand.charAt(0).toUpperCase() + brand.slice(1)
+    );
+  };
+
   return (
     <>
       <div className="mb-8">
@@ -203,67 +298,86 @@ export default function CobrancaContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center gap-4 bg-primary/5 p-4 rounded-lg">
-                <div className="bg-primary/10 p-3 rounded-full">
-                  <Check size={24} className="text-primary" />
+              {subscriptionData.status === 'canceled' ? (
+                <div className="flex items-center gap-4 bg-primary/5 p-4 rounded-lg">
+                  <div className="bg-primary/10 p-3 rounded-full">
+                    <AlertCircle size={24} className="text-red-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold">Sem plano ativo</h3>
+                    <p className="text-muted-foreground">
+                      Sua assinatura foi cancelada. Assine um plano para ter
+                      acesso a mais recursos.
+                    </p>
+                  </div>
+                  <Link href="/planos">
+                    <Button type="button" variant="default">
+                      Assinar plano
+                    </Button>
+                  </Link>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold">{getNomePlano()}</h3>
-                  <p className="text-muted-foreground">
-                    {subscriptionData.plano !== PLANOS.FREE
-                      ? `Mensal • R$ ${
-                          LIMITES_CONSULTA[subscriptionData.plano] === 30
-                            ? 59
-                            : LIMITES_CONSULTA[subscriptionData.plano] === 60
-                              ? 99
-                              : 149
-                        },00`
-                      : 'Gratuito'}
-                  </p>
-                  <p className="text-muted-foreground">
-                    {subscriptionData.consultasRestantes} de{' '}
-                    {subscriptionData.limiteConsultas} consultas disponíveis
-                  </p>
+              ) : (
+                <div className="flex items-center gap-4 bg-primary/5 p-4 rounded-lg">
+                  <div className="bg-primary/10 p-3 rounded-full">
+                    <Check size={24} className="text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold">{getNomePlano()}</h3>
+                    <p className="text-muted-foreground">
+                      {subscriptionData.plano !== PLANOS.FREE
+                        ? `Mensal • R$ ${
+                            subscriptionData.plano === 'starter'
+                              ? 59
+                              : subscriptionData.plano === 'standard'
+                                ? 99
+                                : 149
+                          },00`
+                        : 'Gratuito'}
+                    </p>
+                    <p className="text-muted-foreground">
+                      {subscriptionData.consultasRestantes} de{' '}
+                      {subscriptionData.limiteConsultas} consultas disponíveis
+                    </p>
+                  </div>
+                  <Link href="/planos">
+                    <Button type="button" variant="outline">
+                      Ajustar plano
+                    </Button>
+                  </Link>
                 </div>
-                <Link href="/planos">
-                  <Button type="button" variant="outline">
-                    Ajustar plano
-                  </Button>
-                </Link>
-              </div>
+              )}
 
               {subscriptionData.plano !== PLANOS.FREE && (
                 <div className="flex flex-col gap-4">
-                  <div className="flex justify-between items-center">
-                    <div className="text-sm text-muted-foreground">
-                      Próxima cobrança
+                  {subscriptionData.status !== 'canceled' && (
+                    <div className="flex justify-between items-center">
+                      <div className="text-sm text-muted-foreground">
+                        {subscriptionData.status === 'canceled_at_period_end'
+                          ? 'Plano termina em'
+                          : 'Sua assinatura será renovada automaticamente em'}
+                      </div>
+                      <div className="font-medium">
+                        {formatDate(subscriptionData.proximaCobranca)}
+                      </div>
                     </div>
-                    <div className="font-medium">
-                      {formatDate(subscriptionData.proximaCobranca)}
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="text-sm text-muted-foreground">
-                      Método de pagamento
-                    </div>
-                    <div className="font-medium flex items-center gap-2">
-                      <CreditCard size={16} /> Cartão de crédito
-                    </div>
-                  </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <div className="text-sm text-muted-foreground">Status</div>
                     <div
                       className={`font-medium flex items-center gap-1 ${
                         subscriptionData.status === 'active'
                           ? 'text-green-600'
-                          : subscriptionData.status === 'canceled'
+                          : subscriptionData.status === 'canceled' ||
+                              subscriptionData.status ===
+                                'canceled_at_period_end'
                             ? 'text-red-600'
                             : 'text-amber-600'
                       }`}
                     >
                       {subscriptionData.status === 'active' ? (
                         <Check size={16} />
-                      ) : subscriptionData.status === 'canceled' ? (
+                      ) : subscriptionData.status === 'canceled' ||
+                        subscriptionData.status === 'canceled_at_period_end' ? (
                         <AlertCircle size={16} />
                       ) : (
                         <AlertCircle size={16} />
@@ -272,27 +386,83 @@ export default function CobrancaContent() {
                         ? 'Ativo'
                         : subscriptionData.status === 'canceled'
                           ? 'Cancelado'
-                          : subscriptionData.statusPagamento || 'Inativo'}
+                          : subscriptionData.status === 'canceled_at_period_end'
+                            ? 'Assinatura cancelada'
+                            : subscriptionData.statusPagamento || 'Inativo'}
                     </div>
                   </div>
                 </div>
               )}
+            </CardContent>
+          </Card>
 
-              {subscriptionData.plano !== PLANOS.FREE &&
-                subscriptionData.stripeCustomerId && (
-                  <div className="flex justify-end">
+          {/* Informações do método de pagamento */}
+          {subscriptionData.plano !== PLANOS.FREE &&
+            subscriptionData.status !== 'canceled' && (
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    <CreditCard size={20} className="text-primary" />
+                    Pagamento
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex justify-between items-center">
+                    {cardLoading ? (
+                      <div className="text-muted-foreground">
+                        Carregando informações de pagamento...
+                      </div>
+                    ) : cardInfo ? (
+                      <div className="flex items-center gap-2">
+                        <CreditCard size={16} />
+                        <span className="font-medium">
+                          {formatBrand(cardInfo.brand)} •••• {cardInfo.last4}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground">
+                        Método de pagamento não disponível
+                      </div>
+                    )}
+
                     <Button
                       type="button"
                       variant="outline"
                       onClick={handleAtualizarPagamento}
                       disabled={portalLoading}
                     >
-                      {portalLoading ? 'Carregando...' : 'Atualizar pagamento'}
+                      {portalLoading ? 'Carregando...' : 'Atualizar'}
                     </Button>
                   </div>
-                )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+
+          {/* Card especial para assinatura cancelada no final do período */}
+          {subscriptionData.plano !== PLANOS.FREE &&
+            subscriptionData.status === 'canceled_at_period_end' && (
+              <Card className="mb-6 border-red-100">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <AlertCircle size={20} className="text-red-600" />
+                  <div>
+                    <h3 className="font-medium">Assinatura cancelada</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Plano termina em{' '}
+                      {formatDate(subscriptionData.proximaCobranca)}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleReassinar}
+                    disabled={reactivateLoading}
+                    className="ml-auto"
+                  >
+                    {reactivateLoading ? 'Processando...' : 'Reassinar'}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
           {subscriptionData.plano !== PLANOS.FREE &&
             subscriptionData.pagamentos &&
@@ -345,7 +515,17 @@ export default function CobrancaContent() {
                               </span>
                             </td>
                             <td className="p-2">
-                              <Button type="button" variant="ghost" size="sm">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (pagamento.invoiceUrl) {
+                                    window.open(pagamento.invoiceUrl, '_blank');
+                                  }
+                                }}
+                                disabled={!pagamento.invoiceUrl}
+                              >
                                 Ver
                               </Button>
                             </td>

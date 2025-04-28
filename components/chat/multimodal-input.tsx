@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useLocalStorage, useWindowSize } from 'usehooks-ts';
 import { useQueryLimit } from '../providers/query-limit-provider';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 import { ArrowUpIcon, StopIcon } from '../common/icons';
 import { Button } from '../ui/button';
@@ -52,6 +53,7 @@ function PureMultimodalInput({
   const {
     ultimaConsulta,
     planoAtingido,
+    assinaturaCancelada,
     consultasRestantes,
     verificarConsulta,
   } = useQueryLimit();
@@ -182,6 +184,14 @@ function PureMultimodalInput({
           ) {
             event.preventDefault();
 
+            // Se a assinatura está cancelada, mostrar mensagem adequada
+            if (assinaturaCancelada) {
+              toast.error(
+                'Sua assinatura foi cancelada. Assine um plano para continuar usando o serviço.',
+              );
+              return;
+            }
+
             // Se o plano já atingiu o limite, mostrar mensagem adequada
             if (planoAtingido) {
               toast.error(
@@ -202,11 +212,21 @@ function PureMultimodalInput({
       />
 
       <div className="absolute bottom-0 right-0 p-2 w-full flex flex-row justify-between items-center">
-        {(ultimaConsulta || planoAtingido) && (
+        {(ultimaConsulta || planoAtingido || assinaturaCancelada) && (
           <div
-            className={`ml-2 flex-1 ${planoAtingido ? 'text-red-500' : 'text-amber-500'} text-sm font-medium flex items-center`}
+            className={`ml-2 flex-1 ${
+              assinaturaCancelada
+                ? 'text-red-500'
+                : planoAtingido
+                  ? 'text-red-500'
+                  : 'text-amber-500'
+            } text-sm font-medium flex items-center`}
           >
-            {planoAtingido ? (
+            {assinaturaCancelada ? (
+              <span className="flex-1">
+                Sua assinatura foi cancelada. Assine um plano para continuar.
+              </span>
+            ) : planoAtingido ? (
               <span className="flex-1">
                 Você atingiu o limite de consultas do seu plano
               </span>
@@ -215,14 +235,24 @@ function PureMultimodalInput({
                 Falta apenas 1 consulta no seu plano
               </span>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              className={`ml-2 ${planoAtingido ? 'border-red-500 hover:bg-red-50 text-red-500' : 'border-amber-500 hover:bg-amber-50 text-amber-500'}`}
-              onClick={() => router.push('/planos?limite=atingido')}
+            <Link
+              href={assinaturaCancelada ? '/planos' : '/planos?limite=atingido'}
+              passHref
+              legacyBehavior={false}
             >
-              Ajustar plano
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className={`ml-2 ${
+                  assinaturaCancelada || planoAtingido
+                    ? 'border-red-500 hover:bg-red-50 text-red-500'
+                    : 'border-amber-500 hover:bg-amber-50 text-amber-500'
+                }`}
+                type="button"
+              >
+                {assinaturaCancelada ? 'Assinar plano' : 'Ajustar plano'}
+              </Button>
+            </Link>
           </div>
         )}
 
@@ -235,6 +265,7 @@ function PureMultimodalInput({
               submitForm={submitForm}
               status={status}
               planoAtingido={planoAtingido}
+              assinaturaCancelada={assinaturaCancelada}
             />
           )}
         </div>
@@ -281,11 +312,13 @@ function PureSendButton({
   input,
   status,
   planoAtingido,
+  assinaturaCancelada,
 }: {
   submitForm: () => void;
   input: string;
   status: UseChatHelpers['status'];
   planoAtingido?: boolean;
+  assinaturaCancelada?: boolean;
 }) {
   return (
     <Button
@@ -293,6 +326,14 @@ function PureSendButton({
       className="rounded-full p-1.5 h-fit border dark:border-zinc-600"
       onClick={(event) => {
         event.preventDefault();
+
+        // Se a assinatura está cancelada, mostrar mensagem adequada
+        if (assinaturaCancelada) {
+          toast.error(
+            'Sua assinatura foi cancelada. Assine um plano para continuar usando o serviço.',
+          );
+          return;
+        }
 
         // Se o plano já atingiu o limite, mostrar mensagem adequada
         if (planoAtingido) {
@@ -304,7 +345,12 @@ function PureSendButton({
 
         submitForm();
       }}
-      disabled={input.length === 0 || status !== 'ready' || planoAtingido}
+      disabled={
+        input.length === 0 ||
+        status !== 'ready' ||
+        planoAtingido ||
+        assinaturaCancelada
+      }
     >
       <ArrowUpIcon size={14} />
     </Button>
@@ -315,5 +361,7 @@ const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
   if (prevProps.input !== nextProps.input) return false;
   if (prevProps.status !== nextProps.status) return false;
   if (prevProps.planoAtingido !== nextProps.planoAtingido) return false;
+  if (prevProps.assinaturaCancelada !== nextProps.assinaturaCancelada)
+    return false;
   return true;
 });
