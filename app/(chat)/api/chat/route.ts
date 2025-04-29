@@ -13,6 +13,7 @@ import {
   saveChat,
   saveMessages,
   incrementConsultasUsadas,
+  updateChatTitle,
 } from '@/lib/db/queries';
 import { verificarLimiteConsulta } from '@/lib/actions/subscription';
 import {
@@ -217,6 +218,52 @@ export async function DELETE(request: Request) {
     return new Response('Chat deleted', { status: 200 });
   } catch (error) {
     return new Response('An error occurred while processing your request!', {
+      status: 500,
+    });
+  }
+}
+
+export async function PATCH(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return new Response('ID é obrigatório', { status: 400 });
+  }
+
+  const session = await auth();
+
+  if (!session || !session.user) {
+    return new Response('Não autorizado', { status: 401 });
+  }
+
+  try {
+    const chat = await getChatById({ id });
+
+    if (!chat) {
+      return new Response('Chat não encontrado', { status: 404 });
+    }
+
+    if (chat.userId !== session.user.id) {
+      return new Response('Não autorizado', { status: 401 });
+    }
+
+    const body = await request.json();
+
+    if (
+      !body.title ||
+      typeof body.title !== 'string' ||
+      body.title.trim() === ''
+    ) {
+      return new Response('Título inválido', { status: 400 });
+    }
+
+    await updateChatTitle({ id, title: body.title.trim() });
+
+    return new Response('Título atualizado com sucesso', { status: 200 });
+  } catch (error) {
+    console.error('Erro ao atualizar título do chat:', error);
+    return new Response('Ocorreu um erro ao processar sua solicitação', {
       status: 500,
     });
   }

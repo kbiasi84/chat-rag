@@ -1,12 +1,5 @@
 'use client';
-import {
-  ChevronUp,
-  User as UserIcon,
-  Settings,
-  BookOpen,
-  LogOut,
-} from 'lucide-react';
-import Image from 'next/image';
+import { ChevronUp, User as UserIcon, Settings, LogOut } from 'lucide-react';
 import type { User } from 'next-auth';
 import { signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
@@ -48,13 +41,7 @@ export function SidebarUserNav({ user }: { user: User }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent bg-background data-[state=open]:text-sidebar-accent-foreground h-10">
-              <Image
-                src={`https://avatar.vercel.sh/${email}`}
-                alt={displayName}
-                width={24}
-                height={24}
-                className="rounded-full"
-              />
+              <UserIcon className="size-6 rounded-full" />
               <span className="truncate capitalize">{displayName}</span>
               <ChevronUp className="ml-auto" />
             </SidebarMenuButton>
@@ -67,7 +54,7 @@ export function SidebarUserNav({ user }: { user: User }) {
               className="cursor-pointer"
               onSelect={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              <Settings className="mr-2 h-4 w-4" />
+              <Settings className="mr-2 size-4" />
               {`Modo ${theme === 'light' ? 'Escuro' : 'Claro'}`}
             </DropdownMenuItem>
 
@@ -75,7 +62,7 @@ export function SidebarUserNav({ user }: { user: User }) {
 
             <DropdownMenuItem asChild>
               <Link href="/configuracoes" className="w-full cursor-pointer">
-                <Settings className="mr-2 h-4 w-4" />
+                <Settings className="mr-2 size-4" />
                 Configurações
               </Link>
             </DropdownMenuItem>
@@ -86,7 +73,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/admin" className="w-full cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
+                    <Settings className="mr-2 size-4" />
                     Painel de Administração
                   </Link>
                 </DropdownMenuItem>
@@ -105,7 +92,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   });
                 }}
               >
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="mr-2 size-4" />
                 Sair
               </button>
             </DropdownMenuItem>

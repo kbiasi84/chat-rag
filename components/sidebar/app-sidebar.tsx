@@ -2,6 +2,7 @@
 
 import type { User } from 'next-auth';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 import { PlusIcon } from '@/components/common/icons';
 import { SidebarHistory } from '@/components/sidebar/sidebar-history';
@@ -30,17 +31,25 @@ export function AppSidebar({ user }: { user: User | undefined }) {
     <Sidebar className="group-data-[side=left]:border-r-0">
       <SidebarHeader>
         <SidebarMenu>
-          <div className="flex flex-row justify-between items-center">
+          <div className="flex flex-row justify-between items-center px-1">
             <Link
               href="/"
               onClick={() => {
                 setOpenMobile(false);
               }}
-              className="flex flex-row gap-3 items-center"
+              className="flex items-center justify-center flex-1 pl-2"
             >
-              <span className="text-lg font-semibold px-2 hover:bg-muted rounded-md cursor-pointer">
-                CONSULTOR
-              </span>
+              <div className="flex items-center justify-center gap-2">
+                <Image
+                  src="/images/logo-ChatDP-preta.png"
+                  alt="ChatDP Logo"
+                  width={28}
+                  height={28}
+                />
+                <span className="text-lg font-semibold hover:bg-muted rounded-md cursor-pointer">
+                  ChatDP
+                </span>
+              </div>
             </Link>
             <Tooltip>
               <TooltipTrigger asChild>

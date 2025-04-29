@@ -771,3 +771,28 @@ export async function getUserByStripeCustomerId(
     throw new Error('Não foi possível encontrar o usuário');
   }
 }
+
+export async function updateChatTitle({
+  id,
+  title,
+}: { id: string; title: string }) {
+  try {
+    await db
+      .update(chat)
+      .set({
+        title,
+        // Opcional: atualizar também a data de atualização se você tiver esse campo
+        // updatedAt: new Date()
+      })
+      .where(eq(chat.id, id));
+
+    console.log(`Título do chat ${id} atualizado para: ${title}`);
+    return true;
+  } catch (error) {
+    console.error(
+      'Falha ao atualizar título do chat no banco de dados:',
+      error,
+    );
+    throw error;
+  }
+}

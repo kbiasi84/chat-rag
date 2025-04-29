@@ -1,4 +1,4 @@
-import { Chat } from '@/lib/db/schema';
+import type { Chat } from '@/lib/db/schema';
 import {
   SidebarMenuAction,
   SidebarMenuButton,
@@ -16,13 +16,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  CheckCircleFillIcon,
-  GlobeIcon,
-  LockIcon,
-  MoreHorizontalIcon,
-  ShareIcon,
-  TrashIcon,
-} from '@/components/common/icons';
+  CheckCircle,
+  Globe,
+  Lock,
+  MoreHorizontal,
+  Share,
+  Trash,
+  Pencil,
+} from 'lucide-react';
 import { memo } from 'react';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
 
@@ -30,17 +31,22 @@ const PureChatItem = ({
   chat,
   isActive,
   onDelete,
+  onChangeTitle,
   setOpenMobile,
 }: {
   chat: Chat;
   isActive: boolean;
   onDelete: (chatId: string) => void;
+  onChangeTitle: (chatId: string) => void;
   setOpenMobile: (open: boolean) => void;
 }) => {
   const { visibilityType, setVisibilityType } = useChatVisibility({
     chatId: chat.id,
     initialVisibility: chat.visibility,
   });
+
+  // Log para depuração
+  //console.log(`Renderizando ChatItem: ${chat.id} - ${chat.title}`);
 
   return (
     <SidebarMenuItem>
@@ -56,15 +62,23 @@ const PureChatItem = ({
             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground mr-0.5"
             showOnHover={!isActive}
           >
-            <MoreHorizontalIcon />
+            <MoreHorizontal />
             <span className="sr-only">Mais</span>
           </SidebarMenuAction>
         </DropdownMenuTrigger>
 
         <DropdownMenuContent side="bottom" align="end">
+          <DropdownMenuItem
+            className="cursor-pointer"
+            onSelect={() => onChangeTitle(chat.id)}
+          >
+            <Pencil />
+            <span>Mudar título</span>
+          </DropdownMenuItem>
+
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="cursor-pointer">
-              <ShareIcon />
+              <Share />
               <span>Compatilhamento</span>
             </DropdownMenuSubTrigger>
             <DropdownMenuPortal>
@@ -76,12 +90,10 @@ const PureChatItem = ({
                   }}
                 >
                   <div className="flex flex-row gap-2 items-center">
-                    <LockIcon size={12} />
+                    <Lock size={12} />
                     <span>Privado</span>
                   </div>
-                  {visibilityType === 'private' ? (
-                    <CheckCircleFillIcon />
-                  ) : null}
+                  {visibilityType === 'private' ? <CheckCircle /> : null}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer flex-row justify-between"
@@ -90,10 +102,10 @@ const PureChatItem = ({
                   }}
                 >
                   <div className="flex flex-row gap-2 items-center">
-                    <GlobeIcon />
+                    <Globe />
                     <span>Público</span>
                   </div>
-                  {visibilityType === 'public' ? <CheckCircleFillIcon /> : null}
+                  {visibilityType === 'public' ? <CheckCircle /> : null}
                 </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuPortal>
@@ -103,7 +115,7 @@ const PureChatItem = ({
             className="cursor-pointer text-destructive focus:bg-destructive/15 focus:text-destructive dark:text-red-500"
             onSelect={() => onDelete(chat.id)}
           >
-            <TrashIcon />
+            <Trash />
             <span>Deletar</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -113,6 +125,14 @@ const PureChatItem = ({
 };
 
 export const ChatItem = memo(PureChatItem, (prevProps, nextProps) => {
+  // Se o estado de ativo mudou, renderizar novamente
   if (prevProps.isActive !== nextProps.isActive) return false;
+
+  // Se qualquer propriedade do chat mudou, renderizar novamente
+  if (prevProps.chat.id !== nextProps.chat.id) return false;
+  if (prevProps.chat.title !== nextProps.chat.title) return false;
+  if (prevProps.chat.visibility !== nextProps.chat.visibility) return false;
+
+  // Se nada mudou, não renderizar novamente
   return true;
 });

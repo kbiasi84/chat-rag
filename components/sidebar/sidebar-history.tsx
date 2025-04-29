@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import type { User } from 'next-auth';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { motion } from 'framer-motion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +16,16 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarMenu,
@@ -26,7 +35,7 @@ import type { Chat } from '@/lib/db/schema';
 import { fetcher } from '@/lib/utils';
 import { ChatItem } from '@/components/sidebar/sidebar-history-item';
 import useSWRInfinite from 'swr/infinite';
-import { LoaderIcon } from '@/components/common/icons';
+import { Loader } from 'lucide-react';
 
 type GroupedChats = {
   today: Chat[];
@@ -111,6 +120,12 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
+  // Estados para edição de título
+  const [changeTitleId, setChangeTitleId] = useState<string | null>(null);
+  const [showChangeTitleDialog, setShowChangeTitleDialog] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
+
   const hasReachedEnd = paginatedChatHistories
     ? paginatedChatHistories.some((page) => page.hasMore === false)
     : false;
@@ -125,7 +140,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     });
 
     toast.promise(deletePromise, {
-      loading: 'Deleting chat...',
+      loading: 'Deletando chat...',
       success: () => {
         mutate((chatHistories) => {
           if (chatHistories) {
@@ -136,9 +151,9 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
           }
         });
 
-        return 'Chat deleted successfully';
+        return 'Chat deletado com sucesso';
       },
-      error: 'Failed to delete chat',
+      error: 'Falha ao deletar chat',
     });
 
     setShowDeleteDialog(false);
@@ -146,6 +161,61 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     if (deleteId === id) {
       router.push('/');
     }
+  };
+
+  // Manipulador para alteração de título
+  const handleChangeTitle = async () => {
+    if (!changeTitleId || !newTitle.trim()) return;
+
+    setIsUpdatingTitle(true);
+
+    const updatePromise = fetch(`/api/chat?id=${changeTitleId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title: newTitle.trim() }),
+    });
+
+    toast.promise(updatePromise, {
+      loading: 'Atualizando título...',
+      success: () => {
+        // Atualizar o título no array local
+        mutate(
+          (chatHistories) => {
+            if (!chatHistories) return chatHistories;
+
+            const updatedHistories = chatHistories.map((chatHistory) => ({
+              ...chatHistory,
+              chats: chatHistory.chats.map((chat) =>
+                chat.id === changeTitleId
+                  ? { ...chat, title: newTitle.trim() }
+                  : chat,
+              ),
+            }));
+
+            //console.log('Cache atualizado:', updatedHistories);
+            return updatedHistories;
+          },
+          {
+            revalidate: false, // Não revalide o cache
+            populateCache: true, // Atualize o cache com o novo valor
+          },
+        );
+
+        // Fechar o dialog e limpar estados
+        setShowChangeTitleDialog(false);
+        setNewTitle('');
+        setChangeTitleId(null);
+        setIsUpdatingTitle(false);
+        return 'Título atualizado com sucesso';
+      },
+      error: (err) => {
+        setIsUpdatingTitle(false);
+        setChangeTitleId(null);
+        return 'Falha ao atualizar título';
+      },
+    });
   };
 
   if (!user) {
@@ -223,12 +293,22 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                         </div>
                         {groupedChats.today.map((chat) => (
                           <ChatItem
-                            key={chat.id}
+                            key={`${chat.id}-${chat.title}`}
                             chat={chat}
                             isActive={chat.id === id}
                             onDelete={(chatId) => {
                               setDeleteId(chatId);
                               setShowDeleteDialog(true);
+                            }}
+                            onChangeTitle={(chatId) => {
+                              const chat = chatsFromHistory.find(
+                                (c) => c.id === chatId,
+                              );
+                              if (chat) {
+                                setNewTitle(chat.title);
+                                setChangeTitleId(chatId);
+                                setShowChangeTitleDialog(true);
+                              }
                             }}
                             setOpenMobile={setOpenMobile}
                           />
@@ -243,12 +323,22 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                         </div>
                         {groupedChats.yesterday.map((chat) => (
                           <ChatItem
-                            key={chat.id}
+                            key={`${chat.id}-${chat.title}`}
                             chat={chat}
                             isActive={chat.id === id}
                             onDelete={(chatId) => {
                               setDeleteId(chatId);
                               setShowDeleteDialog(true);
+                            }}
+                            onChangeTitle={(chatId) => {
+                              const chat = chatsFromHistory.find(
+                                (c) => c.id === chatId,
+                              );
+                              if (chat) {
+                                setNewTitle(chat.title);
+                                setChangeTitleId(chatId);
+                                setShowChangeTitleDialog(true);
+                              }
                             }}
                             setOpenMobile={setOpenMobile}
                           />
@@ -263,12 +353,22 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                         </div>
                         {groupedChats.lastWeek.map((chat) => (
                           <ChatItem
-                            key={chat.id}
+                            key={`${chat.id}-${chat.title}`}
                             chat={chat}
                             isActive={chat.id === id}
                             onDelete={(chatId) => {
                               setDeleteId(chatId);
                               setShowDeleteDialog(true);
+                            }}
+                            onChangeTitle={(chatId) => {
+                              const chat = chatsFromHistory.find(
+                                (c) => c.id === chatId,
+                              );
+                              if (chat) {
+                                setNewTitle(chat.title);
+                                setChangeTitleId(chatId);
+                                setShowChangeTitleDialog(true);
+                              }
                             }}
                             setOpenMobile={setOpenMobile}
                           />
@@ -283,12 +383,22 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                         </div>
                         {groupedChats.lastMonth.map((chat) => (
                           <ChatItem
-                            key={chat.id}
+                            key={`${chat.id}-${chat.title}`}
                             chat={chat}
                             isActive={chat.id === id}
                             onDelete={(chatId) => {
                               setDeleteId(chatId);
                               setShowDeleteDialog(true);
+                            }}
+                            onChangeTitle={(chatId) => {
+                              const chat = chatsFromHistory.find(
+                                (c) => c.id === chatId,
+                              );
+                              if (chat) {
+                                setNewTitle(chat.title);
+                                setChangeTitleId(chatId);
+                                setShowChangeTitleDialog(true);
+                              }
                             }}
                             setOpenMobile={setOpenMobile}
                           />
@@ -303,12 +413,22 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
                         </div>
                         {groupedChats.older.map((chat) => (
                           <ChatItem
-                            key={chat.id}
+                            key={`${chat.id}-${chat.title}`}
                             chat={chat}
                             isActive={chat.id === id}
                             onDelete={(chatId) => {
                               setDeleteId(chatId);
                               setShowDeleteDialog(true);
+                            }}
+                            onChangeTitle={(chatId) => {
+                              const chat = chatsFromHistory.find(
+                                (c) => c.id === chatId,
+                              );
+                              if (chat) {
+                                setNewTitle(chat.title);
+                                setChangeTitleId(chatId);
+                                setShowChangeTitleDialog(true);
+                              }
                             }}
                             setOpenMobile={setOpenMobile}
                           />
@@ -336,7 +456,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
           >
             {isValidating ? (
               <span className="flex items-center gap-2">
-                <LoaderIcon />
+                <Loader className="animate-spin" size={14} />
                 Carregando...
               </span>
             ) : (
@@ -363,6 +483,59 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={showChangeTitleDialog}
+        onOpenChange={(isOpen) => {
+          setShowChangeTitleDialog(isOpen);
+          // Limpar estados quando o diálogo for fechado
+          if (!isOpen) {
+            setNewTitle('');
+            setChangeTitleId(null);
+            setIsUpdatingTitle(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar título</DialogTitle>
+            <DialogDescription>
+              Digite um novo título para este chat.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <Input
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              placeholder="Novo título"
+              className="w-full"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newTitle.trim() && !isUpdatingTitle) {
+                  e.preventDefault();
+                  handleChangeTitle();
+                }
+              }}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowChangeTitleDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleChangeTitle}
+              disabled={!newTitle.trim() || isUpdatingTitle}
+            >
+              {isUpdatingTitle ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
