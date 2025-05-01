@@ -9,8 +9,8 @@
   "plugins": ["tailwindcss"],
   "rules": {
     "tailwindcss/no-custom-classname": "off",
-    "tailwindcss/classnames-order": "off"
-    //"import/no-unresolved": "true"
+    "tailwindcss/classnames-order": "off",
+    "import/no-unresolved": "off"
   },
   "settings": {
     "import/resolver": {

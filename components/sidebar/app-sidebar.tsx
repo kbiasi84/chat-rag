@@ -4,7 +4,7 @@ import type { User } from 'next-auth';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
-import { PlusIcon } from '@/components/common/icons';
+import { Plus } from 'lucide-react';
 import { SidebarHistory } from '@/components/sidebar/sidebar-history';
 import { SidebarUserNav } from '@/components/sidebar/sidebar-user-nav';
 import { Button } from '@/components/ui/button';
@@ -63,7 +63,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                     router.refresh();
                   }}
                 >
-                  <PlusIcon />
+                  <Plus size={16} />
                 </Button>
               </TooltipTrigger>
               <TooltipContent align="end">Nova Conversa</TooltipContent>

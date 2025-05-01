@@ -56,30 +56,12 @@ export default defineConfig({
       testMatch: /auth.setup.ts/,
     },
     {
-      name: 'setup:reasoning',
-      testMatch: /reasoning.setup.ts/,
-      dependencies: ['setup:auth'],
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: 'playwright/.auth/session.json',
-      },
-    },
-    {
       name: 'chat',
       testMatch: /chat.test.ts/,
       dependencies: ['setup:auth'],
       use: {
         ...devices['Desktop Chrome'],
         storageState: 'playwright/.auth/session.json',
-      },
-    },
-    {
-      name: 'reasoning',
-      testMatch: /reasoning.test.ts/,
-      dependencies: ['setup:reasoning'],
-      use: {
-        ...devices['Desktop Chrome'],
-        storageState: 'playwright/.reasoning/session.json',
       },
     },
     {

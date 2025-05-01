@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-import { SidebarLeftIcon } from '@/components/common/icons';
+import { PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function SidebarToggle({
@@ -23,7 +23,7 @@ export function SidebarToggle({
           variant="outline"
           className="md:px-2 md:h-fit"
         >
-          <SidebarLeftIcon size={16} />
+          <PanelLeft size={16} />
         </Button>
       </TooltipTrigger>
       <TooltipContent align="start">Alternar barra lateral</TooltipContent>

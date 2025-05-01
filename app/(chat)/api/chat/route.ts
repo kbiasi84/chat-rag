@@ -114,10 +114,11 @@ export async function POST(request: Request) {
             system: prompt,
             messages,
             maxSteps: 5,
-            experimental_activeTools:
-              selectedChatModel === 'chat-model-reasoning'
-                ? []
-                : ['analyzeQuery', 'getKnowledgeInfo', 'addToKnowledgeBase'],
+            experimental_activeTools: [
+              'analyzeQuery',
+              'getKnowledgeInfo',
+              'addToKnowledgeBase',
+            ],
             experimental_transform: smoothStream({
               chunking: 'word',
               delayInMs: 15,
@@ -171,9 +172,7 @@ export async function POST(request: Request) {
           });
 
           result.consumeStream();
-          result.mergeIntoDataStream(dataStream, {
-            sendReasoning: false, // Para false para não expor o raciocínio interno
-          });
+          result.mergeIntoDataStream(dataStream);
         } catch (streamError) {
           console.error('Erro durante o streaming da resposta:', streamError);
           throw streamError;

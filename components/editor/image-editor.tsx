@@ -1,4 +1,4 @@
-import { LoaderIcon } from '@/components/common/icons';
+import { Loader } from 'lucide-react';
 import cn from 'classnames';
 
 interface ImageEditorProps {
@@ -27,7 +27,7 @@ export function ImageEditor({
         <div className="flex flex-row gap-4 items-center">
           {!isInline && (
             <div className="animate-spin">
-              <LoaderIcon />
+              <Loader size={16} />
             </div>
           )}
           <div>Gerando imagem...</div>

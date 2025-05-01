@@ -6,7 +6,7 @@ import { useWindowSize } from 'usehooks-ts';
 
 import type { UISuggestion } from '@/lib/editor/suggestions';
 
-import { CrossIcon, MessageIcon } from '@/components/common/icons';
+import { X, MessageSquare } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +38,7 @@ export const Suggestion = ({
           }}
           whileHover={{ scale: 1.1 }}
         >
-          <MessageIcon size={windowWidth && windowWidth < 768 ? 16 : 14} />
+          <MessageSquare size={windowWidth && windowWidth < 768 ? 16 : 14} />
         </motion.div>
       ) : (
         <motion.div
@@ -62,7 +62,7 @@ export const Suggestion = ({
                 setIsExpanded(false);
               }}
             >
-              <CrossIcon size={12} />
+              <X size={12} />
             </button>
           </div>
           <div>{suggestion.description}</div>

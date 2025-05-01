@@ -5,13 +5,12 @@ import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo } from 'react';
 import type { Vote } from '@/lib/db/schema';
-import { SparklesIcon } from '../common/icons';
+import { Sparkles, BotMessageSquare } from 'lucide-react';
 import { Markdown } from '../editor/markdown';
 import { MessageActions } from './message-actions';
 import equal from 'fast-deep-equal';
 import { cn } from '@/lib/utils';
 import type { UseChatHelpers } from '@ai-sdk/react';
-import { MessageReasoning } from './message-reasoning';
 
 const PurePreviewMessage = ({
   chatId,
@@ -50,7 +49,7 @@ const PurePreviewMessage = ({
           {message.role === 'assistant' && (
             <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border bg-background">
               <div className="translate-y-px">
-                <SparklesIcon size={14} />
+                <Sparkles size={14} />
               </div>
             </div>
           )}
@@ -59,16 +58,6 @@ const PurePreviewMessage = ({
             {message.parts?.map((part, index) => {
               const { type } = part;
               const key = `message-${message.id}-part-${index}`;
-
-              if (type === 'reasoning') {
-                return (
-                  <MessageReasoning
-                    key={key}
-                    isLoading={isLoading}
-                    reasoning={part.reasoning}
-                  />
-                );
-              }
 
               if (type === 'text') {
                 return (
@@ -139,12 +128,12 @@ export const ThinkingMessage = () => {
         )}
       >
         <div className="size-8 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border">
-          <SparklesIcon size={14} />
+          <BotMessageSquare />
         </div>
 
         <div className="flex flex-col gap-2 w-full">
           <div className="flex flex-col gap-4 text-muted-foreground">
-            Organizando pensamentos...
+            Pensando...
           </div>
         </div>
       </div>

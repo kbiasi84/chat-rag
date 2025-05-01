@@ -1,8 +1,4 @@
-import {
-  TerminalWindowIcon,
-  LoaderIcon,
-  CrossSmallIcon,
-} from '@/components/common/icons';
+import { Terminal, Loader, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Dispatch, SetStateAction } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -87,7 +83,7 @@ export function Console({ consoleOutputs, setConsoleOutputs }: ConsoleProps) {
         <div className="flex flex-row justify-between items-center w-full h-fit border-b dark:border-zinc-700 border-zinc-200 px-2 py-1 sticky top-0 z-50 bg-muted">
           <div className="text-sm pl-2 dark:text-zinc-50 text-zinc-800 flex flex-row gap-3 items-center">
             <div className="text-muted-foreground">
-              <TerminalWindowIcon />
+              <Terminal size={16} />
             </div>
             <div>Console</div>
           </div>
@@ -97,7 +93,7 @@ export function Console({ consoleOutputs, setConsoleOutputs }: ConsoleProps) {
             size="icon"
             onClick={() => setConsoleOutputs([])}
           >
-            <CrossSmallIcon />
+            <X size={16} />
           </Button>
         </div>
 
@@ -124,7 +120,7 @@ export function Console({ consoleOutputs, setConsoleOutputs }: ConsoleProps) {
               ) ? (
                 <div className="flex flex-row gap-2">
                   <div className="animate-spin size-fit self-center mb-auto mt-0.5">
-                    <LoaderIcon />
+                    <Loader size={16} />
                   </div>
                   <div className="text-muted-foreground">
                     {consoleOutput.status === 'in_progress'

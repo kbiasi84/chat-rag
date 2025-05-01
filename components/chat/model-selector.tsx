@@ -13,7 +13,7 @@ import {
 import { chatModels } from '@/lib/ai/models';
 import { cn } from '@/lib/utils';
 
-import { CheckCircleFillIcon, ChevronDownIcon } from '../common/icons';
+import { ChevronDown, CheckCircle } from 'lucide-react';
 
 export function ModelSelector({
   selectedModelId,
@@ -45,7 +45,7 @@ export function ModelSelector({
           className="md:px-2 md:h-[34px]"
         >
           {selectedChatModel?.name}
-          <ChevronDownIcon />
+          <ChevronDown size={16} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-[300px]">
@@ -79,7 +79,7 @@ export function ModelSelector({
                 </div>
 
                 <div className="text-foreground dark:text-foreground opacity-0 group-data-[active=true]/item:opacity-100">
-                  <CheckCircleFillIcon />
+                  <CheckCircle size={16} />
                 </div>
               </button>
             </DropdownMenuItem>

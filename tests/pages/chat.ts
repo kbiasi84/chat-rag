@@ -118,27 +118,9 @@ export class ChatPage {
       .innerText()
       .catch(() => null);
 
-    const reasoningElement = await lastMessageElement
-      .getByTestId('message-reasoning')
-      .isVisible()
-      .then(async (visible) =>
-        visible
-          ? await lastMessageElement
-              .getByTestId('message-reasoning')
-              .innerText()
-          : null,
-      )
-      .catch(() => null);
-
     return {
       element: lastMessageElement,
       content,
-      reasoning: reasoningElement,
-      async toggleReasoningVisibility() {
-        await lastMessageElement
-          .getByTestId('message-reasoning-toggle')
-          .click();
-      },
       async upvote() {
         await lastMessageElement.getByTestId('message-upvote').click();
       },

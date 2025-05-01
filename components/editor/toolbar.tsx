@@ -26,11 +26,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-import {
-  ArrowUpIcon,
-  StopIcon,
-  SummarizeIcon,
-} from '@/components/common/icons';
+import { ArrowUp, Square, FileDigit } from 'lucide-react';
 import type { UseChatHelpers } from '@ai-sdk/react';
 
 // Definições dos tipos que foram removidos
@@ -59,7 +55,7 @@ const artifactDefinitions: ArtifactDefinition[] = [
     toolbar: [
       {
         description: 'Resumir',
-        icon: <SummarizeIcon />,
+        icon: <FileDigit size={16} />,
         onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
           const { appendMessage } = params;
           appendMessage({
@@ -75,7 +71,7 @@ const artifactDefinitions: ArtifactDefinition[] = [
     toolbar: [
       {
         description: 'Executar código',
-        icon: <ArrowUpIcon />,
+        icon: <ArrowUp size={16} />,
         onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
           const { appendMessage } = params;
           appendMessage({
@@ -91,7 +87,7 @@ const artifactDefinitions: ArtifactDefinition[] = [
     toolbar: [
       {
         description: 'Descrever imagem',
-        icon: <SummarizeIcon />,
+        icon: <FileDigit size={16} />,
         onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
           const { appendMessage } = params;
           appendMessage({
@@ -107,7 +103,7 @@ const artifactDefinitions: ArtifactDefinition[] = [
     toolbar: [
       {
         description: 'Analisar dados',
-        icon: <SummarizeIcon />,
+        icon: <FileDigit size={16} />,
         onClick: (params: { appendMessage: UseChatHelpers['append'] }) => {
           const { appendMessage } = params;
           appendMessage({
@@ -202,7 +198,7 @@ const Tool = ({
             handleSelect();
           }}
         >
-          {selectedTool === description ? <ArrowUpIcon /> : icon}
+          {selectedTool === description ? <ArrowUp size={16} /> : icon}
         </motion.div>
       </TooltipTrigger>
       <TooltipContent
@@ -308,7 +304,11 @@ const ReadingLevelSelector = ({
                 }
               }}
             >
-              {currentLevel === 2 ? <SummarizeIcon /> : <ArrowUpIcon />}
+              {currentLevel === 2 ? (
+                <FileDigit size={16} />
+              ) : (
+                <ArrowUp size={16} />
+              )}
             </motion.div>
           </TooltipTrigger>
           <TooltipContent
@@ -511,7 +511,7 @@ const PureToolbar = ({
               setMessages((messages) => messages);
             }}
           >
-            <StopIcon />
+            <Square size={16} />
           </motion.div>
         ) : selectedTool === 'adjust-reading-level' ? (
           <ReadingLevelSelector

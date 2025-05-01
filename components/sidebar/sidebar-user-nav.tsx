@@ -1,5 +1,13 @@
 'use client';
-import { ChevronUp, User as UserIcon, Settings, LogOut } from 'lucide-react';
+import {
+  ChevronUp,
+  User as UserIcon,
+  Settings,
+  LogOut,
+  Sun,
+  Moon,
+  LayoutDashboard,
+} from 'lucide-react';
 import type { User } from 'next-auth';
 import { signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
@@ -54,7 +62,11 @@ export function SidebarUserNav({ user }: { user: User }) {
               className="cursor-pointer"
               onSelect={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              <Settings className="mr-2 size-4" />
+              {theme === 'light' ? (
+                <Moon className="mr-2 size-4" />
+              ) : (
+                <Sun className="mr-2 size-4" />
+              )}
               {`Modo ${theme === 'light' ? 'Escuro' : 'Claro'}`}
             </DropdownMenuItem>
 
@@ -73,7 +85,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/admin" className="w-full cursor-pointer">
-                    <Settings className="mr-2 size-4" />
+                    <LayoutDashboard className="mr-2 size-4" />
                     Painel de Administração
                   </Link>
                 </DropdownMenuItem>

@@ -44,27 +44,9 @@ export class ArtifactPage {
       .innerText()
       .catch(() => null);
 
-    const reasoningElement = await lastMessageElement
-      .getByTestId('message-reasoning')
-      .isVisible()
-      .then(async (visible) =>
-        visible
-          ? await lastMessageElement
-              .getByTestId('message-reasoning')
-              .innerText()
-          : null,
-      )
-      .catch(() => null);
-
     return {
       element: lastMessageElement,
       content,
-      reasoning: reasoningElement,
-      async toggleReasoningVisibility() {
-        await lastMessageElement
-          .getByTestId('message-reasoning-toggle')
-          .click();
-      },
     };
   }
 

@@ -47,50 +47,13 @@ const textToDeltas = (text: string): LanguageModelV1StreamPart[] => {
   return deltas;
 };
 
-const reasoningToDeltas = (text: string): LanguageModelV1StreamPart[] => {
-  const deltas = text
-    .split(' ')
-    .map((char) => ({ type: 'reasoning' as const, textDelta: `${char} ` }));
-
-  return deltas;
-};
-
 export const getResponseChunksByPrompt = (
   prompt: CoreMessage[],
-  isReasoningEnabled: boolean = false,
 ): Array<LanguageModelV1StreamPart> => {
   const recentMessage = prompt.at(-1);
 
   if (!recentMessage) {
     throw new Error('No recent message found!');
-  }
-
-  if (isReasoningEnabled) {
-    if (compareMessages(recentMessage, TEST_PROMPTS.USER_SKY)) {
-      return [
-        ...reasoningToDeltas('The sky is blue because of rayleigh scattering!'),
-        ...textToDeltas("It's just blue duh!"),
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          logprobs: undefined,
-          usage: { completionTokens: 10, promptTokens: 3 },
-        },
-      ];
-    } else if (compareMessages(recentMessage, TEST_PROMPTS.USER_GRASS)) {
-      return [
-        ...reasoningToDeltas(
-          'Grass is green because of chlorophyll absorption!',
-        ),
-        ...textToDeltas("It's just green duh!"),
-        {
-          type: 'finish',
-          finishReason: 'stop',
-          logprobs: undefined,
-          usage: { completionTokens: 10, promptTokens: 3 },
-        },
-      ];
-    }
   }
 
   if (compareMessages(recentMessage, TEST_PROMPTS.USER_THANKS)) {
