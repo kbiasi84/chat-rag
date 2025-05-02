@@ -1,5 +1,5 @@
 import type { UIMessage } from 'ai';
-import { PreviewMessage, ThinkingMessage } from './message';
+import { PreviewMessage } from './message';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import { Greeting } from './greeting';
 import { memo } from 'react';
@@ -29,6 +29,36 @@ function PureMessages({
   const [messagesContainerRef, messagesEndRef] =
     useScrollToBottom<HTMLDivElement>();
 
+  // Verificar se há alguma mensagem do assistente com conteúdo
+  const hasAssistantMessageWithContent = messages.some(
+    (msg) =>
+      msg.role === 'assistant' && msg.content && msg.content.trim() !== '',
+  );
+
+  // Mostrar indicador de carregamento apenas se:
+  // 1. O status for 'submitted' ou 'streaming'
+  // 2. E não houver nenhuma mensagem do assistente com conteúdo
+  const showLoadingIndicator =
+    (status === 'submitted' || status === 'streaming') &&
+    !hasAssistantMessageWithContent;
+
+  // Criar uma mensagem de carregamento quando necessário
+  const messagesWithLoading = [...messages];
+
+  // Adicionar uma mensagem de carregamento temporária se necessário
+  if (showLoadingIndicator && messages.length > 0) {
+    const lastMessage = messages[messages.length - 1];
+    // Só adicionar se a última mensagem for do usuário
+    if (lastMessage.role === 'user') {
+      messagesWithLoading.push({
+        id: 'loading-message',
+        role: 'assistant',
+        content: '',
+        parts: [],
+      });
+    }
+  }
+
   return (
     <div
       ref={messagesContainerRef}
@@ -36,12 +66,12 @@ function PureMessages({
     >
       {messages.length === 0 && <Greeting />}
 
-      {messages.map((message, index) => (
+      {messagesWithLoading.map((message, index) => (
         <PreviewMessage
           key={message.id}
           chatId={chatId}
           message={message}
-          isLoading={status === 'streaming' && messages.length - 1 === index}
+          isLoading={status === 'streaming' || message.id === 'loading-message'}
           vote={
             votes
               ? votes.find((vote) => vote.messageId === message.id)
@@ -50,12 +80,9 @@ function PureMessages({
           setMessages={setMessages}
           reload={reload}
           isReadonly={isReadonly}
+          status={status}
         />
       ))}
-
-      {status === 'submitted' &&
-        messages.length > 0 &&
-        messages[messages.length - 1].role === 'user' && <ThinkingMessage />}
 
       <div
         ref={messagesEndRef}

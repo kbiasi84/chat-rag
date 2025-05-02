@@ -11,7 +11,7 @@ import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { customAlphabet } from 'nanoid';
 
-import type { DBMessage, Document } from '@/lib/db/schema';
+import type { DBMessage } from '@/lib/db/schema';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -132,16 +132,6 @@ export function sanitizeResponseMessages({
 export function getMostRecentUserMessage(messages: Array<UIMessage>) {
   const userMessages = messages.filter((message) => message.role === 'user');
   return userMessages.at(-1);
-}
-
-export function getDocumentTimestampByIndex(
-  documents: Array<Document>,
-  index: number,
-) {
-  if (!documents) return new Date();
-  if (index > documents.length) return new Date();
-
-  return documents[index].createdAt;
 }
 
 export function getTrailingMessageId({

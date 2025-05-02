@@ -9,7 +9,7 @@ interface ChatModel {
 export const chatModels: Array<ChatModel> = [
   {
     id: 'chat-dp',
-    name: 'Consultor de DP',
+    name: 'ChatDP',
     description: 'Especialista em questões trabalhistas e recursos humanos',
   },
   /*{

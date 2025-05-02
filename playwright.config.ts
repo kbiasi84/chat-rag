@@ -64,6 +64,7 @@ export default defineConfig({
         storageState: 'playwright/.auth/session.json',
       },
     },
+    /*
     {
       name: 'artifacts',
       testMatch: /artifacts.test.ts/,
@@ -73,6 +74,7 @@ export default defineConfig({
         storageState: 'playwright/.auth/session.json',
       },
     },
+    */
 
     // {
     //   name: 'firefox',

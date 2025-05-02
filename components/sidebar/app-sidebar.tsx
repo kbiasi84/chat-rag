@@ -41,7 +41,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
             >
               <div className="flex items-center justify-center gap-2">
                 <Image
-                  src="/images/logo-ChatDP-preta.png"
+                  src="/logos/logo-ChatDP-preta.png"
                   alt="ChatDP Logo"
                   width={28}
                   height={28}

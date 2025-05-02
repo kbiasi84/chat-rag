@@ -1,26 +1,10 @@
 import { customProvider } from 'ai';
-import { groq } from '@ai-sdk/groq';
 import { openai } from '@ai-sdk/openai';
-import { isTestEnvironment } from '../constants';
-import { artifactModel, chatModel, titleModel } from './models.test';
 
-export const myProvider = isTestEnvironment
-  ? customProvider({
-      languageModels: {
-        'chat-model': chatModel,
-        'title-model': titleModel,
-        'artifact-model': artifactModel,
-        'chat-dp': chatModel,
-      },
-    })
-  : customProvider({
-      languageModels: {
-        'chat-model': openai('gpt-4o'),
-        'title-model': openai('gpt-3.5-turbo'),
-        'artifact-model': openai('gpt-4o'),
-        'chat-dp': openai('gpt-4o'),
-      },
-      imageModels: {
-        'small-model': openai.image('dall-e-3'),
-      },
-    });
+export const myProvider = customProvider({
+  languageModels: {
+    'chat-dp': openai('gpt-4o'),
+    'title-model': openai('gpt-3.5-turbo'),
+    //'chat-model': openai('gpt-4o'),
+  },
+});
