@@ -68,22 +68,36 @@ export const {
           const users = await getUser(email);
           if (users.length === 0) return null;
 
-          // biome-ignore lint: Forbidden non-null assertion.
-          const passwordsMatch = await compare(senha, users[0].senha!);
-          if (!passwordsMatch) return null;
+          // Verificar se existe uma senha armazenada
+          if (!users[0].senha) {
+            console.error(`Usuário sem senha definida: ${email}`);
+            return null;
+          }
 
-          // Garantir que os campos personalizados sejam incluídos no objeto retornado
-          return {
-            id: users[0].id,
-            email: users[0].email,
-            name: users[0].nome || null,
-            image: null,
-            emailVerified: null,
-            nome: users[0].nome || undefined,
-            perfil: users[0].perfil || undefined,
-            whatsapp: users[0].whatsapp || undefined,
-            atividade: users[0].atividade || undefined,
-          };
+          try {
+            // biome-ignore lint: Forbidden non-null assertion.
+            const passwordsMatch = await compare(senha, users[0].senha!);
+            if (!passwordsMatch) return null;
+
+            // Garantir que os campos personalizados sejam incluídos no objeto retornado
+            return {
+              id: users[0].id,
+              email: users[0].email,
+              name: users[0].nome || null,
+              image: null,
+              emailVerified: null,
+              nome: users[0].nome || undefined,
+              perfil: users[0].perfil || undefined,
+              whatsapp: users[0].whatsapp || undefined,
+              atividade: users[0].atividade || undefined,
+            };
+          } catch (compareError) {
+            console.error(
+              `Erro na comparação de senhas para ${email}:`,
+              compareError,
+            );
+            return null;
+          }
         } catch (error) {
           console.error('Erro na autorização:', error);
           return null;

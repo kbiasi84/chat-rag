@@ -167,7 +167,7 @@ function PureMultimodalInput({
       <Textarea
         data-testid="multimodal-input"
         ref={textareaRef}
-        placeholder="Fale com o consultor..."
+        placeholder="Pergunte o que você precisa..."
         value={input}
         onChange={handleInput}
         className={cx(

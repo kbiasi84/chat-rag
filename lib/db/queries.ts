@@ -1,10 +1,11 @@
 import 'server-only';
 
 import { genSaltSync, hashSync } from 'bcrypt-ts';
-import { and, asc, desc, eq, gt, gte, inArray, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm'; // Corrigido para importar SQL como tipo
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   user,
@@ -39,6 +40,8 @@ export async function getUser(email: string): Promise<Array<User>> {
         whatsapp: user.whatsapp,
         atividade: user.atividade,
         perfil: user.perfil,
+        resetToken: user.resetToken,
+        resetTokenExpires: user.resetTokenExpires,
         criadoEm: user.criadoEm,
         atualizadoEm: user.atualizadoEm,
       })
@@ -671,5 +674,94 @@ export async function updateChatTitle({
       error,
     );
     throw error;
+  }
+}
+
+/**
+ * Cria um token de recuperação de senha para um usuário
+ * @param userId ID do usuário
+ * @returns O token de recuperação gerado
+ */
+export async function createPasswordResetToken(
+  userId: string,
+): Promise<string> {
+  try {
+    // Gerar um token único
+    const token = uuidv4();
+
+    // Definir data de expiração (1 hora)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 1);
+
+    // Atualizar o usuário com o token
+    await db
+      .update(user)
+      .set({
+        resetToken: token,
+        resetTokenExpires: expiresAt,
+      })
+      .where(eq(user.id, userId));
+
+    console.log(`Token de recuperação criado para usuário ${userId}`);
+    return token;
+  } catch (error) {
+    console.error('Falha ao criar token de recuperação:', error);
+    throw new Error('Não foi possível criar o token de recuperação');
+  }
+}
+
+/**
+ * Valida um token de recuperação de senha
+ * @param token Token a ser validado
+ * @returns O usuário associado ao token se válido, null caso contrário
+ */
+export async function validatePasswordResetToken(
+  token: string,
+): Promise<User | null> {
+  try {
+    const now = new Date();
+
+    // Buscar usuário com o token fornecido que ainda não expirou
+    const result = await db
+      .select()
+      .from(user)
+      .where(and(eq(user.resetToken, token), gt(user.resetTokenExpires, now)))
+      .limit(1);
+
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('Falha ao validar token de recuperação:', error);
+    throw new Error('Não foi possível validar o token de recuperação');
+  }
+}
+
+/**
+ * Atualiza a senha de um usuário e limpa o token de recuperação
+ * @param userId ID do usuário
+ * @param newPassword Nova senha (não criptografada)
+ */
+export async function updateUserPasswordAndClearToken(
+  userId: string,
+  newPassword: string,
+): Promise<void> {
+  try {
+    // Criptografar a nova senha
+    const salt = genSaltSync(10);
+    const hashedPassword = hashSync(newPassword, salt);
+
+    // Atualizar usuário com nova senha e limpar token
+    await db
+      .update(user)
+      .set({
+        senha: hashedPassword,
+        resetToken: null,
+        resetTokenExpires: null,
+      })
+      .where(eq(user.id, userId));
+
+    console.log(`Senha atualizada para usuário ${userId}`);
+  } catch (error) {
+    console.error('Falha ao atualizar senha do usuário:', error);
+    throw new Error('Não foi possível atualizar a senha');
   }
 }

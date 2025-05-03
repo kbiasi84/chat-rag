@@ -9,6 +9,8 @@ export const user = pgTable('user', {
   whatsapp: varchar('whatsapp', { length: 20 }), // novo campo
   atividade: varchar('atividade', { length: 50 }), // novo campo
   perfil: varchar('perfil', { length: 20 }).notNull().default('usuario'), // novo campo para perfil
+  resetToken: varchar('reset_token', { length: 255 }), // token de recuperação de senha
+  resetTokenExpires: timestamp('reset_token_expires'), // expiração do token
   criadoEm: timestamp('criado_em').notNull().defaultNow(), // novo campo
   atualizadoEm: timestamp('atualizado_em').notNull().defaultNow(), // novo campo
 });

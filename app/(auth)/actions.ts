@@ -7,8 +7,12 @@ import {
   getUser,
   updateUserProfile,
   createFreeSubscription,
+  createPasswordResetToken,
+  validatePasswordResetToken,
+  updateUserPasswordAndClearToken,
 } from '@/lib/db/queries';
 
+import { sendPasswordRecoveryEmail } from '@/lib/email';
 import { signIn } from './auth';
 
 // Schema separado para login
@@ -16,6 +20,25 @@ const loginSchema = z.object({
   email: z.string().email(),
   senha: z.string().min(6),
 });
+
+// Schema para recuperação de senha
+const passwordRecoverySchema = z.object({
+  email: z.string().email(),
+});
+
+// Schema para redefinição de senha
+const resetPasswordSchema = z
+  .object({
+    token: z.string(),
+    senha: z
+      .string()
+      .min(6, { message: 'A senha deve ter pelo menos 6 caracteres' }),
+    confirmarSenha: z.string().min(6),
+  })
+  .refine((data) => data.senha === data.confirmarSenha, {
+    message: 'As senhas não conferem',
+    path: ['confirmarSenha'],
+  });
 
 // Schema completo para registro
 const registerSchema = z.object({
@@ -54,6 +77,98 @@ export const login = async (
   } catch (error) {
     console.error('Erro no login:', error);
     if (error instanceof z.ZodError) {
+      return { status: 'invalid_data' };
+    }
+
+    return { status: 'failed' };
+  }
+};
+
+export interface PasswordRecoveryActionState {
+  status:
+    | 'idle'
+    | 'in_progress'
+    | 'success'
+    | 'failed'
+    | 'invalid_data'
+    | 'user_not_found';
+}
+
+export const recoverPassword = async (
+  _: PasswordRecoveryActionState,
+  formData: FormData,
+): Promise<PasswordRecoveryActionState> => {
+  try {
+    const validatedData = passwordRecoverySchema.parse({
+      email: formData.get('email'),
+    });
+
+    // Verificar se o usuário existe
+    const [user] = await getUser(validatedData.email);
+
+    if (!user) {
+      return { status: 'user_not_found' };
+    }
+
+    // Gerar token de recuperação
+    const token = await createPasswordResetToken(user.id);
+
+    // Enviar email com token
+    try {
+      await sendPasswordRecoveryEmail(user.email, token);
+    } catch (emailError) {
+      console.error('Erro ao enviar email de recuperação:', emailError);
+      return { status: 'failed' };
+    }
+
+    return { status: 'success' };
+  } catch (error) {
+    console.error('Erro na recuperação de senha:', error);
+    if (error instanceof z.ZodError) {
+      return { status: 'invalid_data' };
+    }
+
+    return { status: 'failed' };
+  }
+};
+
+export interface ResetPasswordActionState {
+  status:
+    | 'idle'
+    | 'in_progress'
+    | 'success'
+    | 'failed'
+    | 'invalid_data'
+    | 'invalid_token';
+}
+
+export const resetPassword = async (
+  _: ResetPasswordActionState,
+  formData: FormData,
+): Promise<ResetPasswordActionState> => {
+  try {
+    // Validar os dados do formulário
+    const validatedData = resetPasswordSchema.parse({
+      token: formData.get('token'),
+      senha: formData.get('senha'),
+      confirmarSenha: formData.get('confirmarSenha'),
+    });
+
+    // Validar o token
+    const user = await validatePasswordResetToken(validatedData.token);
+
+    if (!user) {
+      return { status: 'invalid_token' };
+    }
+
+    // Atualizar a senha e limpar o token
+    await updateUserPasswordAndClearToken(user.id, validatedData.senha);
+
+    return { status: 'success' };
+  } catch (error) {
+    console.error('Erro na redefinição de senha:', error);
+    if (error instanceof z.ZodError) {
+      console.error('Erros de validação:', error.errors);
       return { status: 'invalid_data' };
     }
 
