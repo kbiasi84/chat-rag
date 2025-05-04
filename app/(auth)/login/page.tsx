@@ -1,12 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useState } from 'react';
 import { toast } from '@/components/common/toast';
 
-import { AuthForm } from '@/components/auth/login-form';
+import { LoginForm } from '@/components/auth/login-form';
 import { SubmitButton } from '@/components/auth/submit-button';
+import { AuthSidebar } from '@/components/auth/auth-sidebar';
 
 import { login, type LoginActionState } from '../actions';
 
@@ -48,36 +50,53 @@ export default function Page() {
   };
 
   return (
-    <div className="flex h-dvh w-screen items-start pt-12 md:pt-0 md:items-center justify-center bg-background">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl flex flex-col gap-12">
-        <div className="flex flex-col items-center justify-center gap-2 px-4 text-center sm:px-16">
-          <h3 className="text-xl font-semibold dark:text-zinc-50">Entrar</h3>
-          <p className="text-sm text-gray-500 dark:text-zinc-400">
-            Use seu e-mail e senha para entrar
+    <div className="flex h-dvh w-screen">
+      {/* Coluna da esquerda - Formulário de login */}
+      <div className="w-full md:w-1/2 flex flex-col justify-center items-center bg-dp-black text-dp-white p-8">
+        <div className="w-full max-w-sm flex flex-col items-center">
+          <h2 className="text-2xl font-bold mb-2 text-center">Bem-vindo,</h2>
+          <p className="text-dp-gray mb-8 text-center">
+            Entre com seu e-mail e senha para continuar
           </p>
+
+          <LoginForm action={handleSubmit} defaultEmail={email}>
+            <div className="flex justify-end w-full mb-4">
+              <Link
+                href="/recover-password"
+                className="text-sm text-dp-gray hover:text-dp-white hover:underline transition-colors"
+              >
+                Esqueceu sua senha?
+              </Link>
+            </div>
+            <SubmitButton
+              isSuccessful={isSuccessful}
+              className="w-full bg-dp-orange hover:bg-dp-orange/90 text-dp-white"
+            >
+              <span className="mx-auto">Entrar</span>
+            </SubmitButton>
+
+            <div className="flex items-center my-6 w-full">
+              <div className="flex-1 h-px bg-dp-gray/30" />
+              <p className="px-4 text-dp-gray text-sm">Ou</p>
+              <div className="flex-1 h-px bg-dp-gray/30" />
+            </div>
+
+            <p className="text-center text-sm text-dp-gray mt-2">
+              {'Ainda não tem uma conta? '}
+              <Link
+                href="/register"
+                className="font-semibold text-dp-white hover:underline transition-colors"
+              >
+                Cadastre-se
+              </Link>
+              {' gratuitamente.'}
+            </p>
+          </LoginForm>
         </div>
-        <AuthForm action={handleSubmit} defaultEmail={email}>
-          <div className="flex justify-end w-full">
-            <Link
-              href="/recover-password"
-              className="text-sm text-gray-600 hover:underline dark:text-zinc-400"
-            >
-              Esqueceu sua senha?
-            </Link>
-          </div>
-          <SubmitButton isSuccessful={isSuccessful}>Entrar</SubmitButton>
-          <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
-            {'Ainda não tem uma conta? '}
-            <Link
-              href="/register"
-              className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
-            >
-              Cadastre-se
-            </Link>
-            {' gratuitamente.'}
-          </p>
-        </AuthForm>
       </div>
+
+      {/* Coluna da direita - Branding */}
+      <AuthSidebar />
     </div>
   );
 }

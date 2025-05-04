@@ -1,17 +1,17 @@
 import { AuthForm } from './auth-form';
 import { FormField } from './form-field';
 
-export function LoginForm({
+type PasswordRecoverFormProps = {
+  action: NonNullable<string | ((formData: FormData) => void | Promise<void>)>;
+  children: React.ReactNode;
+  defaultEmail?: string;
+};
+
+export function PasswordRecoverForm({
   action,
   children,
   defaultEmail = '',
-}: {
-  action: NonNullable<
-    string | ((formData: FormData) => void | Promise<void>) | undefined
-  >;
-  children: React.ReactNode;
-  defaultEmail?: string;
-}) {
+}: PasswordRecoverFormProps) {
   return (
     <AuthForm action={action} className="w-full">
       <FormField
@@ -24,16 +24,8 @@ export function LoginForm({
         required
         autoFocus
         defaultValue={defaultEmail}
+        title="Digite o email associado à sua conta"
         className="mb-4"
-      />
-
-      <FormField
-        id="senha"
-        name="senha"
-        label="Senha"
-        type="password"
-        required
-        className="mb-2"
       />
 
       {children}

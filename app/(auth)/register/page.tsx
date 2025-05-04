@@ -7,6 +7,7 @@ import { toast } from '@/components/common/toast';
 
 import { FormularioRegistro } from '@/components/auth/register-form';
 import { SubmitButton } from '@/components/auth/submit-button';
+import { AuthSidebar } from '@/components/auth/auth-sidebar';
 
 import { register, type RegisterActionState } from '../actions';
 
@@ -56,31 +57,40 @@ export default function Page() {
   };
 
   return (
-    <div className="flex h-dvh w-screen items-start pt-12 md:pt-0 md:items-center justify-center bg-background">
-      <div className="w-full max-w-md overflow-hidden rounded-2xl gap-12 flex flex-col">
-        <div className="flex flex-col items-center justify-center gap-2 px-4 text-center sm:px-16">
-          <h3 className="text-xl font-semibold dark:text-zinc-50">
-            Cadastre-se
+    <div className="flex h-dvh w-screen">
+      {/* Coluna da esquerda - Formulário de registro */}
+      <div className="w-full md:w-1/2 flex flex-col justify-center items-center bg-dp-black text-dp-white p-8">
+        <div className="w-full max-w-sm flex flex-col items-center">
+          <h3 className="text-2xl font-bold mb-2 text-center">
+            Cadastre-se e teste grátis!
           </h3>
-          <p className="text-sm text-gray-500 dark:text-zinc-400">
+          <p className="text-dp-gray mb-8 text-center">
             Crie uma conta para acessar a plataforma
           </p>
-        </div>
 
-        <FormularioRegistro action={handleSubmit} defaultEmail={email}>
-          <SubmitButton isSuccessful={isSuccessful}>Cadastrar</SubmitButton>
-          <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
-            {'Já tem uma conta? '}
-            <Link
-              href="/login"
-              className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
+          <FormularioRegistro action={handleSubmit} defaultEmail={email}>
+            <SubmitButton
+              isSuccessful={isSuccessful}
+              className="w-full bg-dp-orange hover:bg-dp-orange/90 text-dp-white"
             >
-              Faça login
-            </Link>
-            {' aqui.'}
-          </p>
-        </FormularioRegistro>
+              Cadastrar
+            </SubmitButton>
+            <p className="text-center text-sm text-dp-gray mt-6">
+              {'Já tem uma conta? '}
+              <Link
+                href="/login"
+                className="font-semibold text-dp-white hover:underline"
+              >
+                Faça login
+              </Link>
+              {' aqui.'}
+            </p>
+          </FormularioRegistro>
+        </div>
       </div>
+
+      {/* Coluna da direita - Branding */}
+      <AuthSidebar />
     </div>
   );
 }
