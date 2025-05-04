@@ -1,5 +1,7 @@
+import { getChatById } from '@/lib/db/queries/chat';
+import { getVotesByChatId, voteMessage } from '@/lib/db/queries/vote';
+import { NextResponse } from 'next/server';
 import { auth } from '@/app/(auth)/auth';
-import { getChatById, getVotesByChatId, voteMessage } from '@/lib/db/queries';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);

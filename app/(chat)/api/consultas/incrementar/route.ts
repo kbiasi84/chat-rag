@@ -1,6 +1,6 @@
 import { auth } from '@/app/(auth)/auth';
 import { NextResponse } from 'next/server';
-import { incrementConsultasUsadas } from '@/lib/db/queries';
+import { incrementConsultasUsadas } from '@/lib/db/queries/subscription';
 import { verificarLimiteConsulta } from '@/lib/actions/subscription';
 
 // Forçar o uso do ambiente Node.js completo
@@ -58,8 +58,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           ...verificacao,
-          mensagem:
-            verificacao.mensagem + ' (ATENÇÃO: Esta API está depreciada)',
+          mensagem: `${verificacao.mensagem} (ATENÇÃO: Esta API está depreciada)`,
         },
         { status: 403 },
       );

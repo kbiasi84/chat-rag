@@ -1,8 +1,9 @@
-import { compare } from 'bcrypt-ts';
 import NextAuth from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import { compare } from 'bcrypt-ts';
+import type { JWT, Session } from 'next-auth/jwt';
 
-import { getUser } from '@/lib/db/queries';
+import { getUser } from '@/lib/db/queries/user';
 import { authConfig } from './auth.config';
 
 // Estendendo os tipos para TypeScript
@@ -61,7 +62,7 @@ export const {
     maxAge: 30 * 24 * 60 * 60, // 30 dias
   },
   providers: [
-    Credentials({
+    CredentialsProvider({
       credentials: {},
       async authorize({ email, senha }: any) {
         try {
@@ -136,5 +137,5 @@ export const {
       return session;
     },
   },
-  debug: process.env.NODE_ENV === 'development',
+  debug: process.env.NODE_ENV === 'development', // Habilitando debug apenas em desenvolvimento
 });

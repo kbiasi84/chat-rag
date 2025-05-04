@@ -5,7 +5,7 @@ import { db } from '@/lib/db';
 import { user } from '@/lib/db/schema/user';
 import { eq } from 'drizzle-orm';
 import { compare, hashSync, genSaltSync } from 'bcrypt-ts';
-import { getUser } from '@/lib/db/queries';
+import { getUser } from '@/lib/db/queries/user';
 
 // Schema para alteração de senha
 const alterarSenhaSchema = z.object({

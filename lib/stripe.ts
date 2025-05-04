@@ -176,10 +176,10 @@ export async function createBillingPortalSession(
  */
 export async function cancelStripeSubscription(
   subscriptionId: string,
-  cancelAtPeriodEnd: boolean = false,
+  cancelAtPeriodEnd = false,
 ) {
   try {
-    let canceledSubscription;
+    let canceledSubscription: any;
 
     if (cancelAtPeriodEnd) {
       // Cancelar no final do período atual
@@ -194,10 +194,13 @@ export async function cancelStripeSubscription(
     return {
       success: true,
       status: canceledSubscription.status,
-      cancelAtPeriodEnd: cancelAtPeriodEnd ? true : false,
-      canceledAt: canceledSubscription.canceled_at
-        ? new Date(canceledSubscription.canceled_at * 1000)
-        : new Date(),
+      cancelAtPeriodEnd,
+      canceledAt:
+        cancelAtPeriodEnd && canceledSubscription.cancel_at
+          ? new Date(canceledSubscription.cancel_at * 1000)
+          : canceledSubscription.canceled_at
+            ? new Date(canceledSubscription.canceled_at * 1000)
+            : new Date(),
     };
   } catch (error) {
     console.error('Erro ao cancelar assinatura no Stripe:', error);

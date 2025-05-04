@@ -48,7 +48,15 @@ export function AppSidebar({ user }: { user: User | undefined }) {
               className="flex items-center justify-center flex-1 pl-2"
             >
               <div className="flex items-center justify-center gap-2">
-                <Image src={logoSrc} alt="ChatDP Logo" width={28} height={28} />
+                <div className="relative size-7">
+                  <Image
+                    src={logoSrc}
+                    alt="ChatDP Logo"
+                    fill
+                    sizes="28px"
+                    style={{ objectFit: 'contain' }}
+                  />
+                </div>
                 <span className="text-lg font-semibold hover:bg-muted rounded-md cursor-pointer">
                   Chat<span className="text-dp-orange">DP</span>
                 </span>

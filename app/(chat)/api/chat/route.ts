@@ -11,10 +11,10 @@ import {
   deleteChatById,
   getChatById,
   saveChat,
-  saveMessages,
-  incrementConsultasUsadas,
   updateChatTitle,
-} from '@/lib/db/queries';
+} from '@/lib/db/queries/chat';
+import { saveMessages } from '@/lib/db/queries/message';
+import { incrementConsultasUsadas } from '@/lib/db/queries/subscription';
 import { verificarLimiteConsulta } from '@/lib/actions/subscription';
 import {
   generateUUID,

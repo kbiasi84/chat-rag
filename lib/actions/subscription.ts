@@ -6,10 +6,10 @@ import { redirect } from 'next/navigation';
 
 import {
   getUserSubscription,
-  getUserPayments,
   checkConsultaDisponivel,
   updateSubscription,
-} from '@/lib/db/queries';
+} from '@/lib/db/queries/subscription';
+import { getUserPayments } from '@/lib/db/queries/payment';
 import {
   getOrCreateStripeCustomer,
   createCheckoutSession,
@@ -58,7 +58,7 @@ export async function getSubscriptionData(userId: string) {
       proximaCobranca: subscription.terminaEm,
       pagamentos: payments.map((p) => ({
         id: p.id,
-        data: p.criadoEm,
+        data: p.dataPagamento || p.criadoEm,
         valor: p.valor / 100, // Converter de centavos para reais
         status: p.status,
         invoiceUrl: p.invoiceUrl || null,
@@ -82,12 +82,18 @@ export async function createStripeCheckout(
 ) {
   try {
     // Verificar se o plano selecionado é válido
-    if (!Object.values(PLANOS).includes(plano)) {
+    if (!Object.keys(PLANOS).includes(plano)) {
       throw new Error('Plano inválido');
     }
 
     // Obter o preço do Stripe correspondente ao plano
-    const priceId = PRODUTOS_STRIPE[plano];
+    // Converter o tipo para funcionar com o PRODUTOS_STRIPE
+    const planoLowerCase = plano.toLowerCase() as
+      | 'starter'
+      | 'standard'
+      | 'enterprise';
+    const priceId = PRODUTOS_STRIPE[planoLowerCase];
+
     if (!priceId) {
       throw new Error('Preço não configurado para este plano');
     }
@@ -275,7 +281,7 @@ export async function verificarLimiteConsulta(userId: string) {
  */
 export async function cancelarAssinatura(
   userId: string,
-  cancelAtPeriodEnd: boolean = true, // Por padrão, cancela no final do período
+  cancelAtPeriodEnd = true, // Por padrão, cancela no final do período
 ) {
   try {
     const subscription = await getUserSubscription(userId);

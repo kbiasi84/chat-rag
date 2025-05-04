@@ -8,15 +8,15 @@ import { stripe } from '@/lib/stripe';
 // Importando funções da base de dados
 import {
   upsertSubscription,
-  createPayment,
   updateSubscription,
   getUserSubscription,
   getUserByStripeCustomerId,
-} from '@/lib/db/queries';
+} from '@/lib/db/queries/subscription';
+import { createPayment } from '@/lib/db/queries/payment';
 import { PLANOS } from '@/lib/db/schema/subscription';
 
 /**
- * Webhook alternativo para processar eventos do Stripe sem proteção de autenticação
+ * Webhook processar eventos do Stripe sem proteção de autenticação
  */
 export async function POST(req: NextRequest) {
   console.log('[WEBHOOK-ALT] Requisição recebida');
@@ -103,6 +103,38 @@ export async function POST(req: NextRequest) {
         const stripeSubscription = await stripe.subscriptions.retrieve(
           subscription as string,
         );
+
+        // LOGS PARA ANÁLISE DETALHADA DA ESTRUTURA DA ASSINATURA
+        console.log(
+          '[WEBHOOK-DEBUG] Estrutura da assinatura - current_period_end:',
+          (stripeSubscription as any).current_period_end,
+        );
+        console.log(
+          '[WEBHOOK-DEBUG] Estrutura da assinatura - cancel_at:',
+          (stripeSubscription as any).cancel_at,
+        );
+        console.log(
+          '[WEBHOOK-DEBUG] Estrutura da assinatura - current_period_start:',
+          (stripeSubscription as any).current_period_start,
+        );
+        console.log(
+          '[WEBHOOK-DEBUG] Estrutura da assinatura - billing_cycle_anchor:',
+          (stripeSubscription as any).billing_cycle_anchor,
+        );
+
+        // Verificar se existem dados do primeiro item da assinatura
+        if (stripeSubscription.items?.data?.length > 0) {
+          console.log('[WEBHOOK-DEBUG] Primeiro item da assinatura:');
+          console.log(
+            '[WEBHOOK-DEBUG] - current_period_end:',
+            (stripeSubscription.items.data[0] as any).current_period_end,
+          );
+          console.log(
+            '[WEBHOOK-DEBUG] - current_period_start:',
+            (stripeSubscription.items.data[0] as any).current_period_start,
+          );
+        }
+
         console.log(
           '[WEBHOOK-ALT] Metadados da assinatura:',
           JSON.stringify(stripeSubscription.metadata || {}),
@@ -151,14 +183,40 @@ export async function POST(req: NextRequest) {
         );
         try {
           // Verificar se current_period_end existe e é um número válido
-          const periodEnd = (stripeSubscription as any).current_period_end;
+          let periodEnd = (stripeSubscription as any).current_period_end;
+
+          // Se não encontrar no nível principal, procurar no primeiro item da assinatura
+          if (!periodEnd && stripeSubscription.items?.data?.length > 0) {
+            periodEnd = (stripeSubscription.items.data[0] as any)
+              .current_period_end;
+            console.log(
+              '[WEBHOOK-DEBUG] Usando current_period_end do primeiro item:',
+              periodEnd,
+            );
+          }
+
           let terminaEm = new Date();
+
+          console.log('[WEBHOOK-DEBUG] Valor de periodEnd bruto:', periodEnd);
+          console.log(
+            '[WEBHOOK-DEBUG] Tipo do valor periodEnd:',
+            typeof periodEnd,
+          );
 
           if (periodEnd && typeof periodEnd === 'number') {
             // Multiplicar por 1000 para converter de segundos para milissegundos
             terminaEm = new Date(periodEnd * 1000);
             console.log(
               '[WEBHOOK-ALT] Data de término calculada:',
+              terminaEm.toISOString(),
+            );
+            console.log('[WEBHOOK-DEBUG] Data como objeo Date:', terminaEm);
+            console.log(
+              '[WEBHOOK-DEBUG] Data em milissegundos:',
+              terminaEm.getTime(),
+            );
+            console.log(
+              '[WEBHOOK-DEBUG] Data formatada como ISO string:',
               terminaEm.toISOString(),
             );
           } else {
@@ -221,6 +279,38 @@ export async function POST(req: NextRequest) {
           invoice.customer,
         );
 
+        // LOGS PARA ANÁLISE DETALHADA DA ESTRUTURA DA FATURA
+        console.log('[WEBHOOK-DEBUG] Estrutura da fatura:');
+        console.log(
+          '[WEBHOOK-DEBUG] - subscription:',
+          (invoice as any).subscription,
+        );
+        console.log(
+          '[WEBHOOK-DEBUG] - period_start:',
+          (invoice as any).period_start,
+        );
+        console.log(
+          '[WEBHOOK-DEBUG] - period_end:',
+          (invoice as any).period_end,
+        );
+        console.log(
+          '[WEBHOOK-DEBUG] - lines.data:',
+          invoice.lines?.data ? 'Presente' : 'Ausente',
+        );
+
+        // Verificar se temos informações de período na primeira linha
+        if (invoice.lines?.data?.length > 0) {
+          console.log('[WEBHOOK-DEBUG] Período na primeira linha da fatura:');
+          console.log(
+            '[WEBHOOK-DEBUG] - period.start:',
+            (invoice.lines.data[0] as any).period?.start,
+          );
+          console.log(
+            '[WEBHOOK-DEBUG] - period.end:',
+            (invoice.lines.data[0] as any).period?.end,
+          );
+        }
+
         // Verificar apenas se há customer ID
         if (!invoice.customer) {
           console.log(
@@ -277,22 +367,86 @@ export async function POST(req: NextRequest) {
                 const invoiceUrl = invoice.hosted_invoice_url || undefined;
                 console.log('[WEBHOOK-ALT] URL da fatura:', invoiceUrl);
 
+                // Obter a data do início do período de cobrança (period_start) para registro correto do pagamento
+                let dataPagamento = new Date();
+
+                // Verificar se temos o period_start nas linhas da fatura
+                if (
+                  invoice.lines?.data?.length > 0 &&
+                  (invoice.lines.data[0] as any).period?.start
+                ) {
+                  const periodStart = (invoice.lines.data[0] as any).period
+                    .start;
+                  if (periodStart && typeof periodStart === 'number') {
+                    dataPagamento = new Date(periodStart * 1000);
+                    console.log(
+                      '[WEBHOOK-ALT] Data de pagamento obtida do period.start da linha da fatura:',
+                      dataPagamento.toISOString(),
+                    );
+                  }
+                }
+                // Se não encontrar nas linhas, verificar no period_start da própria fatura
+                else if ((invoice as any).period_start) {
+                  const periodStart = (invoice as any).period_start;
+                  if (typeof periodStart === 'number') {
+                    dataPagamento = new Date(periodStart * 1000);
+                    console.log(
+                      '[WEBHOOK-ALT] Data de pagamento obtida do period_start da fatura:',
+                      dataPagamento.toISOString(),
+                    );
+                  }
+                }
+
                 await createPayment(
                   foundUserId,
                   userSubscription.id,
                   invoice.amount_paid,
                   'paid',
                   invoice.id,
-                  new Date(),
+                  dataPagamento,
                   invoiceUrl,
                 );
                 console.log('[WEBHOOK-ALT] Pagamento registrado com sucesso');
 
-                // Tentar obter detalhes da assinatura se existir
+                // Definir data de término para atualizar a assinatura
                 let terminaEm = new Date();
+                let dataEncontrada = false;
 
-                // Se a assinatura estiver disponível na fatura, usamos ela
-                if ((invoice as any).subscription) {
+                // NOVA PRIORIDADE: Primeiro verificar nas linhas da fatura (dados mais confiáveis)
+                if (
+                  invoice.lines?.data?.length > 0 &&
+                  (invoice.lines.data[0] as any).period?.end
+                ) {
+                  const invoicePeriodEnd = (invoice.lines.data[0] as any).period
+                    .end;
+                  if (
+                    invoicePeriodEnd &&
+                    typeof invoicePeriodEnd === 'number'
+                  ) {
+                    terminaEm = new Date(invoicePeriodEnd * 1000);
+                    console.log(
+                      '[WEBHOOK-ALT] Data de término obtida da linha da fatura (period.end):',
+                      terminaEm.toISOString(),
+                    );
+                    dataEncontrada = true;
+                  }
+                }
+
+                // Segundo: verificar o period_end da própria fatura
+                if (!dataEncontrada && (invoice as any).period_end) {
+                  const invoicePeriodEnd = (invoice as any).period_end;
+                  if (typeof invoicePeriodEnd === 'number') {
+                    terminaEm = new Date(invoicePeriodEnd * 1000);
+                    console.log(
+                      '[WEBHOOK-ALT] Data de término obtida do period_end da fatura:',
+                      terminaEm.toISOString(),
+                    );
+                    dataEncontrada = true;
+                  }
+                }
+
+                // Terceiro: Se a assinatura estiver disponível na fatura, tentar buscar lá
+                if (!dataEncontrada && (invoice as any).subscription) {
                   console.log(
                     '[WEBHOOK-ALT] Subscription ID encontrado na fatura:',
                     (invoice as any).subscription,
@@ -303,15 +457,44 @@ export async function POST(req: NextRequest) {
                         (invoice as any).subscription as string,
                       );
 
-                    const periodEnd = (stripeSubscription as any)
+                    // LOGS PARA ANÁLISE DETALHADA DA ASSINATURA RECUPERADA
+                    console.log(
+                      '[WEBHOOK-DEBUG] Estrutura da assinatura via fatura:',
+                    );
+                    console.log(
+                      '[WEBHOOK-DEBUG] - current_period_end:',
+                      (stripeSubscription as any).current_period_end,
+                    );
+                    console.log(
+                      '[WEBHOOK-DEBUG] - current_period_start:',
+                      (stripeSubscription as any).current_period_start,
+                    );
+
+                    // Tentar obter o period_end da assinatura ou de seus itens
+                    let periodEnd = (stripeSubscription as any)
                       .current_period_end;
+
+                    // Se não encontrar no nível principal, procurar no primeiro item da assinatura
+                    if (
+                      !periodEnd &&
+                      stripeSubscription.items?.data?.length > 0
+                    ) {
+                      periodEnd = (stripeSubscription.items.data[0] as any)
+                        .current_period_end;
+                      console.log(
+                        '[WEBHOOK-DEBUG] Usando current_period_end do item da assinatura:',
+                        periodEnd,
+                      );
+                    }
+
                     if (periodEnd && typeof periodEnd === 'number') {
                       // Multiplicar por 1000 para converter de segundos para milissegundos
                       terminaEm = new Date(periodEnd * 1000);
                       console.log(
-                        '[WEBHOOK-ALT] Data de término calculada da API:',
+                        '[WEBHOOK-ALT] Data de término calculada da API de assinatura:',
                         terminaEm.toISOString(),
                       );
+                      dataEncontrada = true;
                     }
                   } catch (subError) {
                     console.error(
@@ -320,11 +503,13 @@ export async function POST(req: NextRequest) {
                     );
                     // Continuar com a data padrão
                   }
-                } else {
-                  // Se não houver subscription ID, usar data padrão
+                }
+
+                // Por último, se nenhuma data válida foi encontrada, usar data padrão
+                if (!dataEncontrada) {
                   terminaEm.setDate(terminaEm.getDate() + 30);
                   console.log(
-                    '[WEBHOOK-ALT] Data de término padrão calculada:',
+                    '[WEBHOOK-ALT] Data de término padrão calculada (30 dias):',
                     terminaEm.toISOString(),
                   );
                 }
@@ -385,22 +570,82 @@ export async function POST(req: NextRequest) {
             const invoiceUrl = invoice.hosted_invoice_url || undefined;
             console.log('[WEBHOOK-ALT] URL da fatura:', invoiceUrl);
 
+            // Obter a data do início do período de cobrança (period_start) para registro correto do pagamento
+            let dataPagamento = new Date();
+
+            // Verificar se temos o period_start nas linhas da fatura
+            if (
+              invoice.lines?.data?.length > 0 &&
+              (invoice.lines.data[0] as any).period?.start
+            ) {
+              const periodStart = (invoice.lines.data[0] as any).period.start;
+              if (periodStart && typeof periodStart === 'number') {
+                dataPagamento = new Date(periodStart * 1000);
+                console.log(
+                  '[WEBHOOK-ALT] Data de pagamento obtida do period.start da linha da fatura:',
+                  dataPagamento.toISOString(),
+                );
+              }
+            }
+            // Se não encontrar nas linhas, verificar no period_start da própria fatura
+            else if ((invoice as any).period_start) {
+              const periodStart = (invoice as any).period_start;
+              if (typeof periodStart === 'number') {
+                dataPagamento = new Date(periodStart * 1000);
+                console.log(
+                  '[WEBHOOK-ALT] Data de pagamento obtida do period_start da fatura:',
+                  dataPagamento.toISOString(),
+                );
+              }
+            }
+
             await createPayment(
               userId,
               userSubscription.id,
               invoice.amount_paid,
               'paid',
               invoice.id,
-              new Date(),
+              dataPagamento,
               invoiceUrl,
             );
             console.log('[WEBHOOK-ALT] Pagamento registrado com sucesso');
 
-            // Tentar obter detalhes da assinatura se existir
+            // Definir data de término para atualizar a assinatura
             let terminaEm = new Date();
+            let dataEncontrada = false;
 
-            // Se a assinatura estiver disponível na fatura, usamos ela
-            if ((invoice as any).subscription) {
+            // NOVA PRIORIDADE: Primeiro verificar nas linhas da fatura (dados mais confiáveis)
+            if (
+              invoice.lines?.data?.length > 0 &&
+              (invoice.lines.data[0] as any).period?.end
+            ) {
+              const invoicePeriodEnd = (invoice.lines.data[0] as any).period
+                .end;
+              if (invoicePeriodEnd && typeof invoicePeriodEnd === 'number') {
+                terminaEm = new Date(invoicePeriodEnd * 1000);
+                console.log(
+                  '[WEBHOOK-ALT] Data de término obtida da linha da fatura (period.end):',
+                  terminaEm.toISOString(),
+                );
+                dataEncontrada = true;
+              }
+            }
+
+            // Segundo: verificar o period_end da própria fatura
+            if (!dataEncontrada && (invoice as any).period_end) {
+              const invoicePeriodEnd = (invoice as any).period_end;
+              if (typeof invoicePeriodEnd === 'number') {
+                terminaEm = new Date(invoicePeriodEnd * 1000);
+                console.log(
+                  '[WEBHOOK-ALT] Data de término obtida do period_end da fatura:',
+                  terminaEm.toISOString(),
+                );
+                dataEncontrada = true;
+              }
+            }
+
+            // Terceiro: Se a assinatura estiver disponível na fatura, tentar buscar lá
+            if (!dataEncontrada && (invoice as any).subscription) {
               console.log(
                 '[WEBHOOK-ALT] Subscription ID encontrado na fatura:',
                 (invoice as any).subscription,
@@ -410,15 +655,40 @@ export async function POST(req: NextRequest) {
                   (invoice as any).subscription as string,
                 );
 
-                const periodEnd = (stripeSubscription as any)
-                  .current_period_end;
+                // LOGS PARA ANÁLISE DETALHADA DA ASSINATURA RECUPERADA
+                console.log(
+                  '[WEBHOOK-DEBUG] Estrutura da assinatura via fatura:',
+                );
+                console.log(
+                  '[WEBHOOK-DEBUG] - current_period_end:',
+                  (stripeSubscription as any).current_period_end,
+                );
+                console.log(
+                  '[WEBHOOK-DEBUG] - current_period_start:',
+                  (stripeSubscription as any).current_period_start,
+                );
+
+                // Tentar obter o period_end da assinatura ou de seus itens
+                let periodEnd = (stripeSubscription as any).current_period_end;
+
+                // Se não encontrar no nível principal, procurar no primeiro item da assinatura
+                if (!periodEnd && stripeSubscription.items?.data?.length > 0) {
+                  periodEnd = (stripeSubscription.items.data[0] as any)
+                    .current_period_end;
+                  console.log(
+                    '[WEBHOOK-DEBUG] Usando current_period_end do item da assinatura:',
+                    periodEnd,
+                  );
+                }
+
                 if (periodEnd && typeof periodEnd === 'number') {
                   // Multiplicar por 1000 para converter de segundos para milissegundos
                   terminaEm = new Date(periodEnd * 1000);
                   console.log(
-                    '[WEBHOOK-ALT] Data de término calculada da API:',
+                    '[WEBHOOK-ALT] Data de término calculada da API de assinatura:',
                     terminaEm.toISOString(),
                   );
+                  dataEncontrada = true;
                 }
               } catch (subError) {
                 console.error(
@@ -427,11 +697,13 @@ export async function POST(req: NextRequest) {
                 );
                 // Continuar com a data padrão
               }
-            } else {
-              // Se não houver subscription ID, usar data padrão
+            }
+
+            // Por último, se nenhuma data válida foi encontrada, usar data padrão
+            if (!dataEncontrada) {
               terminaEm.setDate(terminaEm.getDate() + 30);
               console.log(
-                '[WEBHOOK-ALT] Data de término padrão calculada:',
+                '[WEBHOOK-ALT] Data de término padrão calculada (30 dias):',
                 terminaEm.toISOString(),
               );
             }
@@ -506,9 +778,39 @@ export async function POST(req: NextRequest) {
                 // Atualizar status
                 try {
                   const subscriptionData = subscription as any;
-                  const terminaEm = subscriptionData.current_period_end
-                    ? new Date(subscriptionData.current_period_end * 1000)
-                    : new Date();
+                  let terminaEm: Date;
+
+                  // Tentar obter a data de término do campo principal
+                  if (subscriptionData.current_period_end) {
+                    terminaEm = new Date(
+                      subscriptionData.current_period_end * 1000,
+                    );
+                    console.log(
+                      '[WEBHOOK-DEBUG] Usando current_period_end para data de término:',
+                      terminaEm.toISOString(),
+                    );
+                  }
+                  // Ou do primeiro item da assinatura
+                  else if (
+                    subscription.items?.data?.length > 0 &&
+                    (subscription.items.data[0] as any).current_period_end
+                  ) {
+                    terminaEm = new Date(
+                      (subscription.items.data[0] as any).current_period_end *
+                        1000,
+                    );
+                    console.log(
+                      '[WEBHOOK-DEBUG] Usando current_period_end do primeiro item para data de término:',
+                      terminaEm.toISOString(),
+                    );
+                  }
+                  // Data atual como último recurso
+                  else {
+                    terminaEm = new Date();
+                    console.log(
+                      '[WEBHOOK-DEBUG] Nenhuma data futura encontrada, usando data atual',
+                    );
+                  }
 
                   console.log(
                     '[WEBHOOK-ALT] Atualizando status para canceled, termina em:',
@@ -572,9 +874,38 @@ export async function POST(req: NextRequest) {
             // Atualizar status
             try {
               const subscriptionData = subscription as any;
-              const terminaEm = subscriptionData.current_period_end
-                ? new Date(subscriptionData.current_period_end * 1000)
-                : new Date();
+              let terminaEm: Date;
+
+              // Tentar obter a data de término do campo principal
+              if (subscriptionData.current_period_end) {
+                terminaEm = new Date(
+                  subscriptionData.current_period_end * 1000,
+                );
+                console.log(
+                  '[WEBHOOK-DEBUG] Usando current_period_end para data de término:',
+                  terminaEm.toISOString(),
+                );
+              }
+              // Ou do primeiro item da assinatura
+              else if (
+                subscription.items?.data?.length > 0 &&
+                (subscription.items.data[0] as any).current_period_end
+              ) {
+                terminaEm = new Date(
+                  (subscription.items.data[0] as any).current_period_end * 1000,
+                );
+                console.log(
+                  '[WEBHOOK-DEBUG] Usando current_period_end do primeiro item para data de término:',
+                  terminaEm.toISOString(),
+                );
+              }
+              // Data atual como último recurso
+              else {
+                terminaEm = new Date();
+                console.log(
+                  '[WEBHOOK-DEBUG] Nenhuma data futura encontrada, usando data atual',
+                );
+              }
 
               console.log(
                 '[WEBHOOK-ALT] Atualizando status para canceled, termina em:',

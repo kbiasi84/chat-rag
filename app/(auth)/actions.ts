@@ -6,11 +6,11 @@ import {
   createUser,
   getUser,
   updateUserProfile,
-  createFreeSubscription,
   createPasswordResetToken,
   validatePasswordResetToken,
   updateUserPasswordAndClearToken,
-} from '@/lib/db/queries';
+} from '@/lib/db/queries/user';
+import { createFreeSubscription } from '@/lib/db/queries/subscription';
 
 import { sendPasswordRecoveryEmail } from '@/lib/email';
 import { signIn } from './auth';

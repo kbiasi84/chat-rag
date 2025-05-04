@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
-import { getUserSubscription } from '@/lib/db/queries';
+import { getUserSubscription } from '@/lib/db/queries/subscription';
 import { cookies } from 'next/headers';
 
 export async function GET(req: Request) {

@@ -7,8 +7,8 @@ import { cookies } from 'next/headers';
 import {
   deleteMessagesByChatIdAfterTimestamp,
   getMessageById,
-  updateChatVisiblityById,
-} from '@/lib/db/queries';
+} from '@/lib/db/queries/message';
+import { updateChatVisiblityById } from '@/lib/db/queries/chat';
 import type { VisibilityType } from '@/components/chat/visibility-selector';
 import { myProvider } from '@/lib/ai/providers';
 

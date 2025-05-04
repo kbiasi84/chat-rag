@@ -1,4 +1,6 @@
-import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
+// import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
+import { getChatById } from '@/lib/db/queries/chat';
+import { getMessagesByChatId } from '@/lib/db/queries/message';
 import { NextResponse } from 'next/server';
 import type { DBMessage } from '@/lib/db/schema';
 
