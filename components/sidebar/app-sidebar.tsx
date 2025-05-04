@@ -47,7 +47,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                   height={28}
                 />
                 <span className="text-lg font-semibold hover:bg-muted rounded-md cursor-pointer">
-                  ChatDP
+                  Chat<span className="text-dp-orange">DP</span>
                 </span>
               </div>
             </Link>

@@ -4,15 +4,19 @@ import { useRouter } from 'next/navigation';
 import { useWindowSize } from 'usehooks-ts';
 import { Plus, Share2, Check } from 'lucide-react';
 import { memo, useState } from 'react';
-import { Tooltip } from '@/components/ui/tooltip';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { ModelSelector } from '@/components/chat/model-selector';
 import { SidebarToggle } from '@/components/sidebar/sidebar-toggle';
 import { Button } from '@/components/ui/button';
 import { useSidebar } from '../ui/sidebar';
-import { TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { VisibilitySelector } from './visibility-selector';
 import type { VisibilityType } from './visibility-selector';
 import { toast } from 'sonner';
+import { useChatVisibility } from '@/hooks/use-chat-visibility';
 
 function PureChatHeader({
   chatId,
@@ -30,10 +34,16 @@ function PureChatHeader({
   const { width: windowWidth } = useWindowSize();
   const [copied, setCopied] = useState(false);
 
+  // Usar o hook useChatVisibility para obter o estado atual de visibilidade
+  const { visibilityType } = useChatVisibility({
+    chatId,
+    initialVisibility: selectedVisibilityType,
+  });
+
   // Função para compartilhar o chat
   const handleShareChat = async () => {
     // Só permite compartilhar se o chat for público
-    if (selectedVisibilityType !== 'public') {
+    if (visibilityType !== 'public') {
       toast.error('Altere a visibilidade para público antes de compartilhar');
       return;
     }
@@ -111,7 +121,7 @@ function PureChatHeader({
               variant="outline"
               className="order-1 md:order-4 md:px-2 px-2 md:h-[34px]"
               onClick={handleShareChat}
-              disabled={selectedVisibilityType !== 'public'}
+              disabled={visibilityType !== 'public'}
             >
               {copied ? <Check size={16} /> : <Share2 size={16} />}
               <span className="md:sr-only">
@@ -120,7 +130,7 @@ function PureChatHeader({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {selectedVisibilityType === 'public'
+            {visibilityType === 'public'
               ? 'Compartilhar link do chat'
               : 'Altere a visibilidade para público para compartilhar'}
           </TooltipContent>
@@ -131,5 +141,8 @@ function PureChatHeader({
 }
 
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
-  return prevProps.selectedModelId === nextProps.selectedModelId;
+  return (
+    prevProps.selectedModelId === nextProps.selectedModelId &&
+    prevProps.selectedVisibilityType === nextProps.selectedVisibilityType
+  );
 });

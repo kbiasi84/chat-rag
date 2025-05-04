@@ -1,6 +1,7 @@
 'use server';
 
-import { generateText, Message } from 'ai';
+import { generateText } from 'ai';
+import type { Message } from 'ai';
 import { cookies } from 'next/headers';
 
 import {
@@ -8,7 +9,7 @@ import {
   getMessageById,
   updateChatVisiblityById,
 } from '@/lib/db/queries';
-import { VisibilityType } from '@/components/chat/visibility-selector';
+import type { VisibilityType } from '@/components/chat/visibility-selector';
 import { myProvider } from '@/lib/ai/providers';
 
 export async function saveChatModelAsCookie(model: string) {
@@ -24,10 +25,10 @@ export async function generateTitleFromUserMessage({
   const { text: title } = await generateText({
     model: myProvider.languageModel('title-model'),
     system: `\n
-    - you will generate a short title based on the first message a user begins a conversation with
-    - ensure it is not more than 80 characters long
-    - the title should be a summary of the user's message
-    - do not use quotes or colons`,
+    - você deverá gerar um título curto baseado na primeira mensagem que o usuário inicia uma conversa
+    - certifique-se de que não tenha mais de 40 caracteres
+    - o título deve ser um resumo da mensagem do usuário
+    - não use aspas ou dois pontos`,
     prompt: JSON.stringify(message),
   });
 
