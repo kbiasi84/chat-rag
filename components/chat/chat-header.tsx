@@ -124,7 +124,7 @@ function PureChatHeader({
               disabled={visibilityType !== 'public'}
             >
               {copied ? <Check size={16} /> : <Share2 size={16} />}
-              <span className="md:sr-only">
+              <span className="sr-only">
                 {copied ? 'Copiado!' : 'Compartilhar'}
               </span>
             </Button>
