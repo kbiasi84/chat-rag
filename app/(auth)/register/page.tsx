@@ -25,7 +25,7 @@ export default function Page() {
 
   useEffect(() => {
     if (state.status === 'user_exists') {
-      toast({ type: 'error', description: 'Esta conta já existe!' });
+      toast({ type: 'error', description: 'Esta conta de email já existe!' });
     } else if (state.status === 'failed') {
       toast({
         type: 'error',

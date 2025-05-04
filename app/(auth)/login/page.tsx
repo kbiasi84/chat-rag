@@ -15,6 +15,7 @@ export default function Page() {
 
   const [email, setEmail] = useState('');
   const [isSuccessful, setIsSuccessful] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
 
   const [state, formAction] = useActionState<LoginActionState, FormData>(
     login,
@@ -38,10 +39,11 @@ export default function Page() {
       setIsSuccessful(true);
       router.refresh();
     }
-  }, [state.status]);
+  }, [state.status, loginAttempts, router]);
 
   const handleSubmit = (formData: FormData) => {
     setEmail(formData.get('email') as string);
+    setLoginAttempts((prev) => prev + 1);
     formAction(formData);
   };
 
@@ -65,12 +67,12 @@ export default function Page() {
           </div>
           <SubmitButton isSuccessful={isSuccessful}>Entrar</SubmitButton>
           <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
-            {'Ainda não te muma conta? '}
+            {'Ainda não tem uma conta? '}
             <Link
               href="/register"
               className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
             >
-              Cadastra-se
+              Cadastre-se
             </Link>
             {' gratuitamente.'}
           </p>

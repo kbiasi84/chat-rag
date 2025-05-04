@@ -1,9 +1,13 @@
 import { createTransport } from 'nodemailer';
-import { SESClient, SendEmailCommand } from '@aws-sdk/client-ses';
+import {
+  SESClient,
+  SendEmailCommand,
+  SendRawEmailCommand,
+} from '@aws-sdk/client-ses';
 
 // Configuração do cliente Amazon SES
 const sesClient = new SESClient({
-  region: process.env.AWS_SES_REGION || 'us-east-1',
+  region: process.env.AWS_SES_REGION || 'sa-east-1',
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
@@ -12,7 +16,10 @@ const sesClient = new SESClient({
 
 // Criar transportador do nodemailer usando Amazon SES
 const transporter = createTransport({
-  SES: { ses: sesClient, aws: { SendEmailCommand } },
+  SES: {
+    ses: sesClient,
+    aws: { SendEmailCommand, SendRawEmailCommand },
+  },
 });
 
 /**
@@ -28,7 +35,7 @@ export async function sendPasswordRecoveryEmail(
   const resetUrl = `${appUrl}/reset-password?token=${recoveryToken}`;
 
   const mailOptions = {
-    from: process.env.EMAIL_FROM || 'noreply@seudominio.com',
+    from: process.env.EMAIL_FROM || 'chatdp.contato@gmail.com',
     to: email,
     subject: 'Recuperação de Senha',
     html: `

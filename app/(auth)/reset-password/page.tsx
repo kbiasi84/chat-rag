@@ -16,6 +16,8 @@ export default function ResetPasswordPage() {
   const router = useRouter();
   const token = searchParams.get('token');
   const [isSuccessful, setIsSuccessful] = useState(false);
+  const [resetAttempts, setResetAttempts] = useState(0);
+  const [buttonText, setButtonText] = useState('Redefinir Senha');
 
   const [state, formAction] = useActionState<
     ResetPasswordActionState,
@@ -32,7 +34,7 @@ export default function ResetPasswordPage() {
       });
       setTimeout(() => {
         router.push('/login');
-      }, 2000);
+      }, 3000);
     }
   }, [token, router]);
 
@@ -55,18 +57,24 @@ export default function ResetPasswordPage() {
       });
       setTimeout(() => {
         router.push('/login');
-      }, 2000);
+      }, 3000);
     } else if (state.status === 'success') {
       setIsSuccessful(true);
+      setButtonText('Redirecionando para login...');
       toast({
         type: 'success',
         description: 'Senha redefinida com sucesso!',
       });
       setTimeout(() => {
         router.push('/login');
-      }, 2000);
+      }, 3000);
     }
-  }, [state.status, router]);
+  }, [state.status, resetAttempts, router]);
+
+  const handleFormAction = (formData: FormData) => {
+    setResetAttempts((prev) => prev + 1);
+    formAction(formData);
+  };
 
   return (
     <div className="flex h-dvh w-screen items-start pt-12 md:pt-0 md:items-center justify-center bg-background">
@@ -80,7 +88,10 @@ export default function ResetPasswordPage() {
           </p>
         </div>
 
-        <Form action={formAction} className="flex flex-col gap-4 px-4 sm:px-16">
+        <Form
+          action={handleFormAction}
+          className="flex flex-col gap-4 px-4 sm:px-16"
+        >
           <input type="hidden" name="token" value={token || ''} />
 
           <div className="flex flex-col gap-2">
@@ -120,9 +131,7 @@ export default function ResetPasswordPage() {
             />
           </div>
 
-          <SubmitButton isSuccessful={isSuccessful}>
-            Redefinir Senha
-          </SubmitButton>
+          <SubmitButton isSuccessful={isSuccessful}>{buttonText}</SubmitButton>
 
           <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
             <Link

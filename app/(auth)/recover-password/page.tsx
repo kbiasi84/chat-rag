@@ -15,6 +15,8 @@ export default function RecoverPasswordPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [isSuccessful, setIsSuccessful] = useState(false);
+  const [recoveryAttempts, setRecoveryAttempts] = useState(0);
+  const [buttonText, setButtonText] = useState('Enviar instruções');
 
   const [state, formAction] = useActionState<
     PasswordRecoveryActionState,
@@ -41,15 +43,23 @@ export default function RecoverPasswordPage() {
       });
     } else if (state.status === 'success') {
       setIsSuccessful(true);
+      setButtonText('Redirecionando para login...');
       toast({
         type: 'success',
-        description: 'Instruções de recuperação enviadas para seu email.',
+        description:
+          'Instruções de recuperação enviadas para seu email. Verifique a caixa de SPAM também',
       });
+
+      // Redirecionar para login após 3 segundos
+      setTimeout(() => {
+        router.push('/login');
+      }, 3000);
     }
-  }, [state.status]);
+  }, [state.status, recoveryAttempts, router]);
 
   const handleSubmit = (formData: FormData) => {
     setEmail(formData.get('email') as string);
+    setRecoveryAttempts((prev) => prev + 1);
     formAction(formData);
   };
 
@@ -90,9 +100,7 @@ export default function RecoverPasswordPage() {
             />
           </div>
 
-          <SubmitButton isSuccessful={isSuccessful}>
-            Enviar instruções
-          </SubmitButton>
+          <SubmitButton isSuccessful={isSuccessful}>{buttonText}</SubmitButton>
 
           <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
             {'Lembrou sua senha? '}
