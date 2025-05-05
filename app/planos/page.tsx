@@ -46,11 +46,11 @@ export default function PlanosPage() {
   // Lidar com a seleção de plano
   const handleSelectPlan = async (plano: keyof typeof PLANOS) => {
     try {
-      // Se já é o plano atual e não está cancelado, não fazer nada
-      if (plano === planoAtual) {
-        router.push('/configuracoes?tab=cobranca');
-        return;
-      }
+      // Remover esta verificação para permitir renovar o mesmo plano
+      // if (plano === planoAtual) {
+      //   router.push('/configuracoes?tab=cobranca');
+      //   return;
+      // }
 
       if (!session?.user?.id || !session.user.email) {
         toast.error('Você precisa estar logado para assinar um plano');
@@ -68,7 +68,11 @@ export default function PlanosPage() {
       );
 
       // Redirecionar para o checkout
-      window.location.href = url;
+      if (url) {
+        window.location.href = url;
+      } else {
+        toast.error('Não foi possível iniciar o checkout');
+      }
     } catch (error) {
       console.error('Erro ao selecionar plano:', error);
       toast.error('Não foi possível processar sua solicitação');
@@ -83,7 +87,7 @@ export default function PlanosPage() {
   // Texto do botão com base no plano atual
   const getButtonText = (plano: string) => {
     if (loading || !session?.user) return 'Carregando...';
-    if (isCurrentPlan(plano)) return 'Plano Atual';
+    if (isCurrentPlan(plano)) return 'Renovar Plano';
     if (planoAtual === null || planoAtual === PLANOS.FREE)
       return 'Assinar Agora';
     if (plano === PLANOS.FREE) return 'Fazer Downgrade';
@@ -100,7 +104,7 @@ export default function PlanosPage() {
     <div className="container mx-auto py-12 px-4">
       <div className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-bold mb-4">
-          Escolha seu plano
+          Planos que crescem com você
         </h1>
       </div>
 
@@ -122,17 +126,17 @@ export default function PlanosPage() {
               <span className="text-muted-foreground">/mês</span>
             </div>
 
-            <div className="space-y-4 flex-grow">
+            <div className="space-y-4 grow">
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>{LIMITES_CONSULTA[PLANOS.STARTER]} consultas/mês</span>
               </div>
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>Histórico de chats</span>
               </div>
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>Compartilhamento por link público</span>
               </div>
             </div>
@@ -180,17 +184,17 @@ export default function PlanosPage() {
               <span className="text-muted-foreground">/mês</span>
             </div>
 
-            <div className="space-y-4 flex-grow">
+            <div className="space-y-4 grow">
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>{LIMITES_CONSULTA[PLANOS.STANDARD]} consultas/mês</span>
               </div>
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>Histórico de chats</span>
               </div>
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>Compartilhamento por link público</span>
               </div>
             </div>
@@ -222,26 +226,24 @@ export default function PlanosPage() {
         >
           <div className="p-6 flex flex-col h-full">
             <h2 className="text-2xl font-bold">Enterprise</h2>
-            <p className="text-muted-foreground mt-2">
-              Para grandes empresas e consultorias
-            </p>
+            <p className="text-muted-foreground mt-2">Para grandes empresas</p>
 
             <div className="mt-4 mb-8">
               <span className="text-4xl font-bold">R$ 149</span>
               <span className="text-muted-foreground">/mês</span>
             </div>
 
-            <div className="space-y-4 flex-grow">
+            <div className="space-y-4 grow">
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>{LIMITES_CONSULTA[PLANOS.ENTERPRISE]} consultas/mês</span>
               </div>
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>Histórico de chats</span>
               </div>
               <div className="flex items-start gap-2">
-                <Check className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+                <Check className="size-5 text-orange-500 shrink-0 mt-0.5" />
                 <span>Compartilhamento por link público</span>
               </div>
             </div>

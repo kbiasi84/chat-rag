@@ -82,7 +82,7 @@ export async function createStripeCheckout(
 ) {
   try {
     // Verificar se o plano selecionado é válido
-    if (!Object.keys(PLANOS).includes(plano)) {
+    if (!Object.values(PLANOS).includes(plano as any)) {
       throw new Error('Plano inválido');
     }
 

@@ -64,6 +64,32 @@ function PureMultimodalInput({
     }
   }, []);
 
+  // Efeito para verificar o limite quando o documento ganha foco ou volta a ficar visível
+  useEffect(() => {
+    // Função para verificar o limite ao retornar à página
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Verificar limites de consulta ao retornar à página
+        verificarConsulta();
+      }
+    };
+
+    // Função para verificar o limite quando a janela ganha foco
+    const handleFocus = () => {
+      verificarConsulta();
+    };
+
+    // Adicionar listeners
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    // Remover listeners ao desmontar componente
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [verificarConsulta]);
+
   // Monitorar mudanças no status para atualizar o limite de consultas após enviar mensagem
   useEffect(() => {
     // Quando o status mudar de 'submitting' para 'submitted', significa que a mensagem foi enviada

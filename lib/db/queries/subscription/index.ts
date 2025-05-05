@@ -84,7 +84,7 @@ export async function upsertSubscription(
     const existingSubscription = await getUserSubscription(userId);
 
     if (existingSubscription) {
-      // Verificar se o plano mudou
+      // Verificar se o plano mudou (apenas para logs)
       const planChanged = existingSubscription.plano !== plano.toLowerCase();
 
       // Atualizar a assinatura existente
@@ -96,17 +96,19 @@ export async function upsertSubscription(
           stripeCustomerId,
           stripeSubscriptionId,
           terminaEm,
-          // Zerar a contagem de consultas se o plano mudou
-          ...(planChanged ? { consultasUsadas: 0 } : {}),
+          // Zerar a contagem de consultas em todos os casos
+          consultasUsadas: 0,
           atualizadoEm: new Date(),
         })
         .where(eq(subscription.id, existingSubscription.id));
 
-      // Registrar no log se o plano mudou
+      // Log diferente dependendo se o plano mudou ou foi renovado
       if (planChanged) {
         console.log(
           `Plano alterado de ${existingSubscription.plano} para ${plano}. Contagem de consultas zerada.`,
         );
+      } else {
+        console.log(`Plano renovado: ${plano}. Contagem de consultas zerada.`);
       }
 
       return existingSubscription.id;
