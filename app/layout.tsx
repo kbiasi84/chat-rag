@@ -6,7 +6,7 @@ import { ThemeProvider } from '@/components/layout/theme-provider';
 import './globals.css';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://chat.vercel.ai'),
+  metadataBase: new URL('https://chatdp.com.br'),
   title: 'ChatDP | Consultoria por IA',
   description:
     'IA especializada em Departamento Pessoal e legislação trabalhista.',
@@ -55,10 +55,10 @@ export default async function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
-      // `next-themes` injects an extra classname to the body element to avoid
-      // visual flicker before hydration. Hence the `suppressHydrationWarning`
-      // prop is necessary to avoid the React hydration mismatch warning.
+      lang="pt-BR"
+      // O `next-themes` injeta uma classe extra no elemento body para evitar
+      // piscadas visuais antes da hidratação. Por isso, a propriedade `suppressHydrationWarning`
+      // é necessária para evitar o aviso de incompatibilidade de hidratação do React.
       // https://github.com/pacocoursey/next-themes?tab=readme-ov-file#with-app
       suppressHydrationWarning
       className={`${geist.variable} ${geistMono.variable}`}

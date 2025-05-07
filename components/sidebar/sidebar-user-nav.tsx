@@ -49,7 +49,7 @@ export function SidebarUserNav({ user }: { user: User }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton className="data-[state=open]:bg-sidebar-accent bg-background data-[state=open]:text-sidebar-accent-foreground h-10">
-              <UserIcon className="size-6 rounded-full" />
+              <UserIcon className="size-6 rounded-full text-orange-500" />
               <span className="truncate capitalize">{displayName}</span>
               <ChevronUp className="ml-auto" />
             </SidebarMenuButton>
@@ -63,9 +63,9 @@ export function SidebarUserNav({ user }: { user: User }) {
               onSelect={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
               {theme === 'light' ? (
-                <Moon className="mr-2 size-4" />
+                <Moon className="mr-2 size-4 text-blue-500" />
               ) : (
-                <Sun className="mr-2 size-4" />
+                <Sun className="mr-2 size-4 text-yellow-500" />
               )}
               {`Modo ${theme === 'light' ? 'Escuro' : 'Claro'}`}
             </DropdownMenuItem>
@@ -74,7 +74,7 @@ export function SidebarUserNav({ user }: { user: User }) {
 
             <DropdownMenuItem asChild>
               <Link href="/configuracoes" className="w-full cursor-pointer">
-                <Settings className="mr-2 size-4" />
+                <Settings className="mr-2 size-4 text-gray-500" />
                 Configurações
               </Link>
             </DropdownMenuItem>
@@ -85,7 +85,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/admin" className="w-full cursor-pointer">
-                    <LayoutDashboard className="mr-2 size-4" />
+                    <LayoutDashboard className="mr-2 size-4 text-purple-500" />
                     Painel de Administração
                   </Link>
                 </DropdownMenuItem>
@@ -104,7 +104,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   });
                 }}
               >
-                <LogOut className="mr-2 size-4" />
+                <LogOut className="mr-2 size-4 text-red-500" />
                 Sair
               </button>
             </DropdownMenuItem>

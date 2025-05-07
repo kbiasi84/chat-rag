@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CreditCard, Calendar, Check, AlertCircle } from 'lucide-react';
@@ -16,7 +16,7 @@ import {
   cancelarAssinatura,
   reativarAssinatura,
 } from '@/lib/actions/subscription';
-import { PLANOS, LIMITES_CONSULTA } from '@/lib/db/schema/subscription';
+import { PLANOS } from '@/lib/db/schema/subscription';
 
 // Interface para informações do cartão
 interface CardInfo {
@@ -44,6 +44,27 @@ export default function CobrancaContent() {
     return format(new Date(date), "dd 'de' MMM. 'de' yyyy", { locale: ptBR });
   };
 
+  // Função para buscar informações do cartão
+  const fetchCardInfo = useCallback(async () => {
+    try {
+      if (!session?.user?.id) return;
+
+      setCardLoading(true);
+      const response = await fetch(`/api/pagamento?userId=${session.user.id}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setCardInfo(data);
+      } else {
+        console.log('Cartão não encontrado ou erro ao buscar dados do cartão');
+      }
+    } catch (err) {
+      console.error('Erro ao buscar dados do cartão:', err);
+    } finally {
+      setCardLoading(false);
+    }
+  }, [session?.user?.id]);
+
   // Buscar dados da assinatura
   useEffect(() => {
     async function fetchSubscription() {
@@ -69,28 +90,7 @@ export default function CobrancaContent() {
     if (session?.user) {
       fetchSubscription();
     }
-  }, [session]);
-
-  // Função para buscar informações do cartão
-  async function fetchCardInfo() {
-    try {
-      if (!session?.user?.id) return;
-
-      setCardLoading(true);
-      const response = await fetch(`/api/pagamento?userId=${session.user.id}`);
-
-      if (response.ok) {
-        const data = await response.json();
-        setCardInfo(data);
-      } else {
-        console.log('Cartão não encontrado ou erro ao buscar dados do cartão');
-      }
-    } catch (err) {
-      console.error('Erro ao buscar dados do cartão:', err);
-    } finally {
-      setCardLoading(false);
-    }
-  }
+  }, [session, fetchCardInfo]);
 
   // Abrir o portal de gerenciamento de assinatura do Stripe
   const handleAtualizarPagamento = async () => {
@@ -216,7 +216,7 @@ export default function CobrancaContent() {
         </div>
 
         <div className="flex justify-center items-center h-40">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <div className="animate-spin rounded-full size-8 border-b-2 border-primary" />
         </div>
       </div>
     );
