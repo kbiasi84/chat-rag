@@ -34,11 +34,11 @@ export async function alterarSenha(
     });
 
     // Buscar usuário pelo ID
-    // Como getUser busca por email, precisamos consultar diretamente
     const [usuario] = await db
       .select()
       .from(user)
-      .where(eq(user.id, validatedData.userId));
+      .where(eq(user.id, validatedData.userId))
+      .limit(1);
 
     if (!usuario || !usuario.senha) {
       return {

@@ -7,5 +7,7 @@ export const myProvider = customProvider({
     'chat-dp': openai('gpt-4o'),
     //aqui para gerar os títulos da conversa, usa o gpt-3.5-turbo abaixo
     'title-model': openai('gpt-3.5-turbo'),
+    //modelo para análise de consulta e extração de palavras-chave
+    'analyze-query-model': openai('gpt-3.5-turbo'),
   },
 });

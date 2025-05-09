@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { findRelevantContent } from '@/lib/ai/embedding';
 import { createResource } from '@/lib/actions/resources';
 import { SourceType } from '@/lib/db/schema/resources';
-import { openai } from '@ai-sdk/openai';
 import { generateObject, tool } from 'ai';
+import { myProvider } from '@/lib/ai/providers';
 
 /**
  * Extrai possíveis referências a artigos de leis e documentos jurídicos do conteúdo
@@ -189,7 +189,7 @@ export const analyzeQuery = tool({
     try {
       console.log('Gerando palavras-chave com IA...');
       const { object } = await generateObject({
-        model: openai.completion('gpt-3.5-turbo-instruct'),
+        model: myProvider.languageModel('analyze-query-model'),
         schema: z.object({
           keywords: z
             .array(z.string())

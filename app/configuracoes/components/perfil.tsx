@@ -44,6 +44,7 @@ export default function PerfilContent({ userData }: PerfilContentProps) {
 
     // Verificar se o ID do usuário está disponível
     const userId = (session?.user as any)?.id;
+
     if (!userId) {
       setStatus('failed');
       setMensagem('Sessão inválida. Por favor, faça login novamente.');
@@ -70,9 +71,9 @@ export default function PerfilContent({ userData }: PerfilContentProps) {
         setConfirmaSenha('');
       }
     } catch (error) {
+      console.error('Erro ao alterar senha:', error);
       setStatus('failed');
       setMensagem('Erro ao processar a solicitação');
-      console.error('Erro ao alterar senha:', error);
     }
   };
 
