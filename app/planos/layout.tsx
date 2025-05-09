@@ -13,8 +13,8 @@ export default function PlanosLayout({
       <header className="py-4">
         <div className="container flex items-center gap-4 px-6 md:px-8">
           <Link href="/configuracoes?tab=cobranca">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <ArrowLeft className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="size-8">
+              <ArrowLeft className="size-4" />
               <span className="sr-only">Voltar</span>
             </Button>
           </Link>

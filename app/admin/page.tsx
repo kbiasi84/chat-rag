@@ -57,14 +57,14 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 pb-10">
       <header className="bg-white dark:bg-neutral-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
           <h1 className="text-xl font-semibold text-neutral-800 dark:text-white">
             Painel de Administração
           </h1>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 py-8">
         {/* Banner de links rápidos */}
         <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm p-6 mb-8">
           <h2 className="text-lg font-medium mb-4 dark:text-white">
@@ -73,7 +73,7 @@ export default function AdminPage() {
           <div className="flex flex-wrap gap-4">
             <Link href="/admin/base-conhecimento">
               <Button className="flex items-center gap-2">
-                <Database className="h-4 w-4" />
+                <Database className="size-4" />
                 Base de Conhecimento
               </Button>
             </Link>
@@ -153,12 +153,12 @@ export default function AdminPage() {
                           >
                             {isAdmin ? (
                               <>
-                                <UserPlus className="h-3 w-3" />
+                                <UserPlus className="size-3" />
                                 Rebaixar
                               </>
                             ) : (
                               <>
-                                <UserCheck className="h-3 w-3" />
+                                <UserCheck className="size-3" />
                                 Promover
                               </>
                             )}

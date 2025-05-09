@@ -32,7 +32,7 @@ interface Resource {
 }
 
 // Definindo o tipo para os links
-interface Link {
+interface WebLink {
   id: string;
   url: string;
   title: string;
@@ -53,7 +53,7 @@ export default function KnowledgeBasePage() {
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
 
   // Estados para gerenciamento de links
-  const [links, setLinks] = useState<Link[]>([]);
+  const [links, setLinks] = useState<WebLink[]>([]);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
@@ -281,7 +281,7 @@ export default function KnowledgeBasePage() {
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 pb-10">
       <header className="bg-white dark:bg-neutral-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex justify-between items-center">
           <h1 className="text-xl font-semibold text-neutral-800 dark:text-white">
             Base de Conhecimento
           </h1>
@@ -291,7 +291,7 @@ export default function KnowledgeBasePage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 py-8">
         <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm p-6 mb-8">
           <h2 className="text-lg font-medium mb-4 dark:text-white">
             Adicionar Novo Conteúdo

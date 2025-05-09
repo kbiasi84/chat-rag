@@ -6,7 +6,7 @@ export function AuthSidebar() {
       <div className="absolute inset-0 bg-[url('/noise.png')] opacity-5" />
       <div className="relative z-10 text-center max-w-md">
         <div className="flex justify-center mb-6">
-          <div className="w-32 h-32 relative">
+          <div className="size-32 relative">
             <Image
               src="logos/logo-ChatDP-preta.png"
               alt="Logo ChatDP"

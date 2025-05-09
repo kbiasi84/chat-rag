@@ -1,6 +1,12 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -43,7 +49,7 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
 
   const router = useRouter();
 
-  const verificarConsulta = async (): Promise<boolean> => {
+  const verificarConsulta = useCallback(async (): Promise<boolean> => {
     try {
       setIsLoading(true);
       const response = await fetch('/api/consultas/verificar');
@@ -91,16 +97,10 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
       }
 
       // Mostrar aviso somente se já estávamos com limite atingido antes desta verificação
-      // Isso evita mostrar o toast quando o usuário está enviando a última consulta disponível
       if (!resultado.permitido && limiteAtingidoAntes && !assinaturaCancelada) {
         toast.error(
           'Limite de consultas atingido. Considere atualizar seu plano para continuar.',
         );
-
-        // Remover o redirecionamento automático
-        // if (resultado.redirecionarParaPlanos) {
-        //   router.push('/planos?limite=atingido');
-        // }
 
         return false;
       }
@@ -114,11 +114,11 @@ export function QueryLimitProvider({ children }: QueryLimitProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [planoAtingido, assinaturaCancelada, router]);
 
   useEffect(() => {
     verificarConsulta();
-  }, []);
+  }, [verificarConsulta]);
 
   return (
     <QueryLimitContext.Provider

@@ -4,16 +4,17 @@ import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { links } from '../db/schema/links';
-import type { NewLinkParams } from '../db/schema/links';
-import { insertLinkSchema } from '../db/schema/links';
+import {
+  links,
+  type NewLinkParams,
+  insertLinkSchema,
+} from '../db/schema/links';
 import {
   createResource,
   getResourcesBySourceId,
   deleteResourcesBySourceId,
 } from './resources';
 import type { Response as FetchResponse } from 'node-fetch';
-import { nanoid } from '@/lib/utils';
 import iconv from 'iconv-lite';
 import { SourceType } from '../db/schema/resources';
 
