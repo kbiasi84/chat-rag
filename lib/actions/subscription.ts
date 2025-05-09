@@ -77,22 +77,17 @@ export async function getSubscriptionData(userId: string) {
 export async function createStripeCheckout(
   userId: string,
   email: string,
-  plano: keyof typeof PLANOS,
+  plano: (typeof PLANOS)[keyof typeof PLANOS],
   returnUrl: string,
 ) {
   try {
     // Verificar se o plano selecionado é válido
-    if (!Object.values(PLANOS).includes(plano as any)) {
+    if (!Object.values(PLANOS).includes(plano)) {
       throw new Error('Plano inválido');
     }
 
     // Obter o preço do Stripe correspondente ao plano
-    // Converter o tipo para funcionar com o PRODUTOS_STRIPE
-    const planoLowerCase = plano.toLowerCase() as
-      | 'starter'
-      | 'standard'
-      | 'enterprise';
-    const priceId = PRODUTOS_STRIPE[planoLowerCase];
+    const priceId = PRODUTOS_STRIPE[plano as keyof typeof PRODUTOS_STRIPE];
 
     if (!priceId) {
       throw new Error('Preço não configurado para este plano');

@@ -44,7 +44,9 @@ export default function PlanosPage() {
   }, [session]);
 
   // Lidar com a seleção de plano
-  const handleSelectPlan = async (plano: keyof typeof PLANOS) => {
+  const handleSelectPlan = async (
+    plano: (typeof PLANOS)[keyof typeof PLANOS],
+  ) => {
     try {
       // Remover esta verificação para permitir renovar o mesmo plano
       // if (plano === planoAtual) {

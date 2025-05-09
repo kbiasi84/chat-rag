@@ -7,3 +7,4 @@ export * from './vote';
 export * from './resources';
 export * from './links';
 export * from './subscription';
+export * from './payment';

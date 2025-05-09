@@ -1,1 +1,0 @@
-ALTER TABLE "embeddings" DROP COLUMN IF EXISTS "content";

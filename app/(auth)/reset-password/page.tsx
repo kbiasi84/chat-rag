@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useEffect, useState, Suspense } from 'react';
 import { toast } from '@/components/common/toast';
 
 import { SubmitButton } from '@/components/auth/submit-button';
@@ -10,7 +10,7 @@ import { PasswordResetForm } from '@/components/auth/password-reset-form';
 import { AuthSidebar } from '@/components/auth/auth-sidebar';
 import { resetPassword, type ResetPasswordActionState } from '../actions';
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token');
@@ -110,5 +110,13 @@ export default function ResetPasswordPage() {
       {/* Coluna da direita - Branding */}
       <AuthSidebar />
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

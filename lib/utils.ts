@@ -2,16 +2,11 @@ import type {
   CoreAssistantMessage,
   CoreToolMessage,
   Message,
-  TextStreamPart,
-  ToolInvocation,
-  ToolSet,
   UIMessage,
 } from 'ai';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { customAlphabet } from 'nanoid';
-
-import type { DBMessage } from '@/lib/db/schema';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

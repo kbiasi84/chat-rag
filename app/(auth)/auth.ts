@@ -1,7 +1,6 @@
 import NextAuth from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { compare } from 'bcrypt-ts';
-import type { JWT, Session } from 'next-auth/jwt';
 
 import { getUser } from '@/lib/db/queries/user';
 import { authConfig } from './auth.config';
@@ -25,7 +24,9 @@ declare module 'next-auth' {
       atividade?: string;
     };
   }
+}
 
+declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     email: string;
@@ -110,13 +111,14 @@ export const {
     async jwt({ token, user }) {
       // Se o usuário acabou de fazer login, adicione os dados ao token
       if (user) {
-        token.id = user.id;
-        token.email = user.email;
-        token.nome = user.nome;
-        token.perfil = user.perfil;
-        token.name = user.nome || null;
-        token.whatsapp = user.whatsapp;
-        token.atividade = user.atividade;
+        const typedToken = token as any;
+        typedToken.id = user.id;
+        typedToken.email = user.email;
+        typedToken.nome = user.nome || undefined;
+        typedToken.perfil = user.perfil || undefined;
+        typedToken.name = user.nome || null;
+        typedToken.whatsapp = user.whatsapp || undefined;
+        typedToken.atividade = user.atividade || undefined;
       }
 
       return token;
@@ -128,11 +130,11 @@ export const {
       // Adicionar propriedades ao objeto de usuário
       user.id = token.id;
       user.email = token.email;
-      user.nome = token.nome;
-      user.perfil = token.perfil;
+      user.nome = token.nome || undefined;
+      user.perfil = token.perfil || undefined;
       user.name = token.name || null;
-      user.whatsapp = token.whatsapp;
-      user.atividade = token.atividade;
+      user.whatsapp = token.whatsapp || undefined;
+      user.atividade = token.atividade || undefined;
 
       return session;
     },

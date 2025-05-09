@@ -2,15 +2,16 @@
 import { getChatById } from '@/lib/db/queries/chat';
 import { getMessagesByChatId } from '@/lib/db/queries/message';
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import type { DBMessage } from '@/lib/db/schema';
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    // Extrair o ID do chat diretamente, como é uma função assíncrona, podemos acessar o parâmetro
-    const chatId = params.id;
+    const { id: chatId } = await context.params;
 
     // Verificar se o chat existe
     const chat = await getChatById({ id: chatId });

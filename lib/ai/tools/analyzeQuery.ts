@@ -1,3 +1,7 @@
+import { tool, generateObject } from 'ai';
+import { z } from 'zod';
+import { openai } from '@ai-sdk/openai';
+
 /**
  * Ferramenta para analisar a consulta do usuário e extrair palavras-chave relevantes
  */

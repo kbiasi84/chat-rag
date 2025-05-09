@@ -1,10 +1,9 @@
-import { tool } from 'ai';
 import { z } from 'zod';
 import { findRelevantContent } from '@/lib/ai/embedding';
 import { createResource } from '@/lib/actions/resources';
 import { SourceType } from '@/lib/db/schema/resources';
 import { openai } from '@ai-sdk/openai';
-import { generateObject } from 'ai';
+import { generateObject, tool } from 'ai';
 
 /**
  * Extrai possíveis referências a artigos de leis e documentos jurídicos do conteúdo
@@ -21,13 +20,13 @@ function extractLegalReferences(content: string): string[] {
 
   // Extrair correspondências de cada padrão
   patterns.forEach((pattern) => {
-    let match;
-    // Usar while separado da atribuição para evitar advertência do linter
-    while ((match = pattern.exec(content)) !== null) {
+    let match: RegExpExecArray | null = pattern.exec(content);
+    while (match !== null) {
       if (match[0] && match[0].trim().length > 3) {
         // Evitar matches muito curtos
         references.push(match[0].trim());
       }
+      match = pattern.exec(content);
     }
   });
 
@@ -248,22 +247,26 @@ export const addToKnowledgeBase = tool({
 
     try {
       const fullContent = title ? `# ${title}\n\n${content}` : content;
-      console.log('Criando recurso na base de conhecimento...');
-
       const result = await createResource({
         content: fullContent,
         sourceType: SourceType.TEXT,
-        sourceId: `user-${Date.now()}`,
       });
 
-      console.log('Conteúdo adicionado com sucesso');
-      console.log('--------- FIM DA ADIÇÃO ---------');
+      // Verificar se o resultado é uma mensagem de sucesso
+      if (typeof result === 'string' && result.includes('successfully')) {
+        return {
+          success: true,
+          message: 'Conteúdo adicionado com sucesso à base de conhecimento.',
+          resourceId: null, // Não temos o ID do recurso neste caso
+        };
+      }
 
+      // Se chegou aqui, algo deu errado
       return {
-        success: true,
-        message: 'Conteúdo adicionado com sucesso à base de conhecimento.',
-        resourceId:
-          typeof result === 'object' && result !== null ? result.id : null,
+        success: false,
+        message:
+          typeof result === 'string' ? result : 'Erro ao adicionar conteúdo.',
+        resourceId: null,
       };
     } catch (error: unknown) {
       console.error('ERRO AO ADICIONAR CONTEÚDO:', error);
@@ -275,7 +278,7 @@ export const addToKnowledgeBase = tool({
 
       return {
         success: false,
-        message: `Erro ao adicionar conteúdo à base de conhecimento: ${errorMessage}`,
+        message: `Erro ao adicionar conteúdo: ${errorMessage}`,
         resourceId: null,
       };
     }

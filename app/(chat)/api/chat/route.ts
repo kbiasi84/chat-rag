@@ -50,13 +50,26 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
+    console.log('[DEBUG-CHAT] Usuário autenticado:', session.user.id);
+
     const userMessage = getMostRecentUserMessage(messages);
 
     if (!userMessage) {
       return Response.json({ error: 'No user message found' }, { status: 400 });
     }
 
+    console.log(
+      '[DEBUG-CHAT] Verificando limite de consultas para usuário:',
+      session.user.id,
+    );
     const resultado = await verificarLimiteConsulta(session.user.id);
+    console.log('[DEBUG-CHAT] Resultado da verificação:', {
+      permitido: resultado.permitido,
+      mensagem: resultado.mensagem,
+      consultasRestantes: resultado.consultasRestantes,
+      plano: resultado.plano,
+    });
+
     if (!resultado.permitido) {
       return Response.json(
         {
@@ -70,7 +83,17 @@ export async function POST(request: Request) {
       );
     }
 
-    await incrementConsultasUsadas(session.user.id);
+    console.log(
+      '[DEBUG-CHAT] Tentando incrementar consultas para usuário:',
+      session.user.id,
+    );
+    try {
+      await incrementConsultasUsadas(session.user.id);
+      console.log('[DEBUG-CHAT] Consultas incrementadas com sucesso');
+    } catch (error) {
+      console.error('[DEBUG-CHAT] Erro ao incrementar consultas:', error);
+      throw error;
+    }
 
     const chat = await getChatById({ id });
 

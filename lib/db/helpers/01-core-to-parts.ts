@@ -1,15 +1,10 @@
 import { config } from 'dotenv';
 import postgres from 'postgres';
-import {
-  chat,
-  message,
-  messageDeprecated,
-  vote,
-  voteDeprecated,
-} from '../schema';
+import { chat, message, vote } from '../schema';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { inArray } from 'drizzle-orm';
-import { appendResponseMessages, UIMessage } from 'ai';
+import { appendResponseMessages } from 'ai';
+import type { UIMessage } from 'ai';
 
 config({
   path: '.env.local',
@@ -52,13 +47,13 @@ async function createNewTable() {
     // Fetch all messages and votes for the current batch of chats in bulk
     const allMessages = await db
       .select()
-      .from(messageDeprecated)
-      .where(inArray(messageDeprecated.chatId, chatIds));
+      .from(message)
+      .where(inArray(message.chatId, chatIds));
 
     const allVotes = await db
       .select()
-      .from(voteDeprecated)
-      .where(inArray(voteDeprecated.chatId, chatIds));
+      .from(vote)
+      .where(inArray(vote.chatId, chatIds));
 
     // Prepare batches for insertion
     const newMessagesToInsert: NewMessageInsert[] = [];

@@ -11,7 +11,7 @@ export const PRODUTOS_STRIPE = {
   [PLANOS.STARTER]: process.env.STRIPE_STARTER_PRICE_ID || '',
   [PLANOS.STANDARD]: process.env.STRIPE_STANDARD_PRICE_ID || '',
   [PLANOS.ENTERPRISE]: process.env.STRIPE_ENTERPRISE_PRICE_ID || '',
-};
+} as const;
 
 /**
  * Cria um cliente no Stripe se ainda não existir
@@ -49,7 +49,7 @@ export async function getOrCreateStripeCustomer(userId: string, email: string) {
 export async function createCheckoutSession(
   customerId: string,
   priceId: string,
-  plano: keyof typeof PLANOS,
+  plano: (typeof PLANOS)[keyof typeof PLANOS],
   returnUrl: string,
   userId: string,
 ) {

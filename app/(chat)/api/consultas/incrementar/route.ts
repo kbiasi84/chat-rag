@@ -1,6 +1,6 @@
 import { auth } from '@/app/(auth)/auth';
 import { NextResponse } from 'next/server';
-import { incrementConsultasUsadas } from '@/lib/db/queries/subscription';
+//import { incrementConsultasUsadas } from '@/lib/db/queries/subscription';
 import { verificarLimiteConsulta } from '@/lib/actions/subscription';
 
 // Forçar o uso do ambiente Node.js completo

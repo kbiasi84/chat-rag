@@ -140,7 +140,24 @@ export async function upsertSubscription(
  */
 export async function incrementConsultasUsadas(userId: string) {
   try {
+    console.log('[DEBUG] Incrementando consultas para usuário:', userId);
+
     const userSubscription = await getUserSubscription(userId);
+    console.log(
+      '[DEBUG] Assinatura encontrada:',
+      userSubscription ? 'Sim' : 'Não',
+    );
+
+    if (userSubscription) {
+      console.log('[DEBUG] Detalhes da assinatura:', {
+        id: userSubscription.id,
+        plano: userSubscription.plano,
+        status: userSubscription.status,
+        consultasUsadas: userSubscription.consultasUsadas,
+        stripeCustomerId: userSubscription.stripeCustomerId,
+        stripeSubscriptionId: userSubscription.stripeSubscriptionId,
+      });
+    }
 
     if (!userSubscription) {
       throw new Error('Assinatura não encontrada');
@@ -156,7 +173,7 @@ export async function incrementConsultasUsadas(userId: string) {
 
     return userSubscription.consultasUsadas + 1;
   } catch (error) {
-    console.error('Falha ao incrementar consultas usadas:', error);
+    console.error('[DEBUG] Falha ao incrementar consultas usadas:', error);
     throw new Error('Não foi possível atualizar o contador de consultas');
   }
 }
