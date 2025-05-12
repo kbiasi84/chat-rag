@@ -1,11 +1,9 @@
-import { and, asc, desc, eq, gt, lt } from 'drizzle-orm';
+import { and, desc, eq, gt, lt } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 
 import { db } from '../connection';
-import { chat, type Chat } from '../../schema';
-
-// Exportar a função de deletar chat com dependências
-export { deleteChatAndDependencies } from './deleteChat';
+import { deleteVotesByChatId } from '../vote';
+import { chat, message, type Chat } from '../../schema';
 
 export async function saveChat({
   id,
@@ -31,11 +29,29 @@ export async function saveChat({
 
 export async function deleteChatById({ id }: { id: string }) {
   try {
-    // As funções de deleção de mensagens e votos foram movidas para seus respectivos arquivos
-    // Aqui só deletamos o chat em si
-    return await db.delete(chat).where(eq(chat.id, id));
+    // Usar transação para garantir que tudo seja deletado ou nada
+    await db.transaction(async (tx) => {
+      try {
+        // 1. Deletar votos relacionados ao chat
+        // Se não houver votos, isso deve completar sem erro
+        await deleteVotesByChatId(id);
+      } catch (voteError) {
+        // Log do erro, mas continue com a exclusão
+        console.warn(`Aviso ao deletar votos para o chat ${id}:`, voteError);
+        // Não lançar o erro para não interromper a transação
+      }
+
+      // 2. Deletar mensagens do chat - continua mesmo se não houver mensagens
+      await tx.delete(message).where(eq(message.chatId, id));
+
+      // 3. Deletar o chat
+      await tx.delete(chat).where(eq(chat.id, id));
+    });
+
+    console.log(`Chat ${id} e suas dependências foram deletados com sucesso.`);
+    return true;
   } catch (error) {
-    console.error('Failed to delete chat by id from database');
+    console.error('Failed to delete chat by id from database', error);
     throw error;
   }
 }

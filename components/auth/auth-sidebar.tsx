@@ -8,7 +8,7 @@ export function AuthSidebar() {
         <div className="flex justify-center mb-6">
           <div className="size-32 relative">
             <Image
-              src="logos/logo-ChatDP-preta.png"
+              src="logos/logo-chatdp-preta.png"
               alt="Logo ChatDP"
               fill
               className="object-contain"

@@ -36,7 +36,7 @@ function LogoWithFallback() {
   return (
     <div className="size-20 relative">
       <Image 
-        src="/logos/logo-ChatDP-preta.png" 
+        src="/logos/logo-chatdp-preta.png" 
         alt="Logo ChatDP" 
         fill
         className="object-contain"
