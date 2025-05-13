@@ -234,6 +234,71 @@ async function processLinkContent(linkId: string) {
       ).remove();
       console.log('Elementos desnecessários removidos');
 
+      // --- NOVO: Extração de tabelas como markdown + contexto ---
+      const tableChunks: string[] = [];
+      $('table').each((i, table) => {
+        const rows: string[] = [];
+        $(table)
+          .find('tr')
+          .each((_, row) => {
+            const cells: string[] = [];
+            $(row)
+              .find('th,td')
+              .each((_, cell) => {
+                cells.push($(cell).text().trim().replace(/\|/g, ' '));
+              });
+            rows.push(`| ${cells.join(' | ')} |`);
+          });
+        // Adiciona separador de cabeçalho se houver cabeçalho
+        if (rows.length > 1) {
+          const headerSep = `| ${rows[0]
+            .split('|')
+            .slice(1, -1)
+            .map(() => '---')
+            .join(' | ')} |`;
+          rows.splice(1, 0, headerSep);
+        }
+        const markdownTable = `${rows.join('\n')}`;
+        // Captura o contexto imediatamente anterior à tabela
+        let context = '';
+        let prev = $(table).prev();
+        // Procura até 2 elementos anteriores relevantes (h1-h6, p, strong, em, span, texto)
+        const contextParts: string[] = [];
+        let contextTries = 0;
+        while (prev.length && contextTries < 2) {
+          const tag = prev[0].tagName?.toLowerCase();
+          if (
+            [
+              'h1',
+              'h2',
+              'h3',
+              'h4',
+              'h5',
+              'h6',
+              'p',
+              'strong',
+              'em',
+              'span',
+            ].includes(tag)
+          ) {
+            const txt = prev.text().trim();
+            if (txt.length > 0) contextParts.unshift(txt);
+          }
+          prev = prev.prev();
+          contextTries++;
+        }
+        if (contextParts.length > 0) {
+          context = contextParts.join('\n');
+        }
+        const chunkContent = context
+          ? `${context}\n\n${markdownTable}`
+          : `${markdownTable}`;
+        tableChunks.push(chunkContent);
+      });
+      console.log(
+        `Extraídas ${tableChunks.length} tabelas do HTML (com contexto)`,
+      );
+
       // Extrai o texto principal
       const bodyText = $('body').text().trim();
       console.log('Texto extraído, tamanho:', bodyText.length);
@@ -257,6 +322,17 @@ async function processLinkContent(linkId: string) {
         sourceId: linkId,
       });
       console.log('Recurso criado com sucesso:', result);
+
+      // Salva cada tabela como chunk separado, se houver
+      for (const markdownTable of tableChunks) {
+        const tableContent = `# ${link.title} (Tabela)\n\nURL: ${link.url}\n\n${markdownTable}`;
+        await createResource({
+          content: tableContent,
+          sourceType: SourceType.LINK,
+          sourceId: linkId,
+        });
+        console.log('Tabela salva como recurso separado.');
+      }
 
       // Atualiza o timestamp de processamento
       console.log('Atualizando timestamp de processamento do link...');
