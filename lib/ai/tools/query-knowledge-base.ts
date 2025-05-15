@@ -48,54 +48,28 @@ export const getKnowledgeInfo = tool({
       .describe('Palavras-chave adicionais para melhorar a busca'),
   }),
   execute: async ({ question, keywords = [] }) => {
-    console.log('--------- CONSULTA À BASE DE CONHECIMENTO ---------');
-    console.log(`Pergunta: "${question}"`);
-    console.log(`Palavras-chave recebidas: ${keywords.join(', ')}`);
-
     try {
-      // Primeiro tenta com a pergunta completa
-      console.log('Buscando resultados diretos para a pergunta...');
       const directResults = await findRelevantContent(question);
-      console.log(`Encontrados ${directResults.length} resultados diretos`);
-
-      // Depois tenta com cada palavra-chave, se fornecidas
       let keywordResults: any[] = [];
       if (keywords.length > 0) {
-        console.log('Buscando resultados por palavras-chave...');
         try {
           keywordResults = await Promise.all(
             keywords.map(async (keyword) => {
-              console.log(`Buscando por palavra-chave: "${keyword}"`);
               return await findRelevantContent(keyword);
             }),
           );
-          console.log(
-            `Busca por palavras-chave concluída com ${keywordResults.flat().length} resultados`,
-          );
         } catch (keywordError) {
           console.error('Erro na busca por palavras-chave:', keywordError);
-          // Continua com os resultados diretos mesmo se houver erro nas palavras-chave
         }
       }
-
-      // Combina e ordena resultados
       const allResults = [...directResults, ...keywordResults.flat()];
-      console.log(`Total combinado: ${allResults.length} resultados`);
-
-      // Remove duplicatas baseado no conteúdo
       const uniqueContents = new Map();
       allResults.forEach((item) => {
         if (item?.content) {
           uniqueContents.set(item.content, item);
         }
       });
-
       const finalResults = Array.from(uniqueContents.values());
-      console.log(
-        `Após remoção de duplicatas: ${finalResults.length} resultados únicos`,
-      );
-
-      // Extrair referências legais de todos os resultados
       const allLegalReferences: string[] = [];
       finalResults.forEach((item) => {
         if (item?.content) {
@@ -103,24 +77,12 @@ export const getKnowledgeInfo = tool({
           allLegalReferences.push(...references);
         }
       });
-      console.log(`Extraídas ${allLegalReferences.length} referências legais`);
-
-      // Ordena por similaridade (maior para menor)
       finalResults.sort((a, b) => {
         const simA = a?.similarity ?? 0;
         const simB = b?.similarity ?? 0;
         return simB - simA;
       });
-
-      console.log(`Resultados ordenados por similaridade`);
-      finalResults.slice(0, 3).forEach((item, idx) => {
-        console.log(
-          `Top ${idx + 1}: Similaridade ${(item?.similarity ?? 0) * 100}%`,
-        );
-      });
-
       if (finalResults.length === 0) {
-        console.log('Nenhuma informação relevante encontrada');
         return {
           found: false,
           message:
@@ -129,11 +91,8 @@ export const getKnowledgeInfo = tool({
           references: [],
         };
       }
-
-      // Formatar os resultados para um formato limpo
       const formattedFragments = finalResults.slice(0, 8).map((item, index) => {
         const similarity = item?.similarity ?? 0;
-
         return {
           id: index + 1,
           content: item.content,
@@ -141,16 +100,7 @@ export const getKnowledgeInfo = tool({
           source: item.resourceId || 'Não especificada',
         };
       });
-
-      // Formatação das referências legais encontradas
       const uniqueLegalReferences = [...new Set(allLegalReferences)];
-
-      console.log(
-        `Retornando ${formattedFragments.length} fragmentos formatados`,
-      );
-      console.log('--------- FIM DA CONSULTA ---------');
-
-      // Retornar objeto estruturado com os resultados formatados
       return {
         found: true,
         fragments: formattedFragments,
@@ -183,11 +133,7 @@ export const analyzeQuery = tool({
     query: z.string().describe('A consulta do usuário'),
   }),
   execute: async ({ query }) => {
-    console.log('--------- ANÁLISE DE CONSULTA ---------');
-    console.log(`Consulta original: "${query}"`);
-
     try {
-      console.log('Gerando palavras-chave com IA...');
       const { object } = await generateObject({
         model: myProvider.languageModel('analyze-query-model'),
         schema: z.object({
@@ -198,13 +144,6 @@ export const analyzeQuery = tool({
         }),
         prompt: `Extraia até 5 palavras-chave importantes desta consulta: "${query}". Forneça apenas palavras individuais ou termos técnicos curtos que sejam relevantes para a busca em uma base de conhecimento.`,
       });
-
-      console.log(
-        `Palavras-chave extraídas: ${object.keywords?.join(', ') || 'nenhuma'}`,
-      );
-      console.log('--------- FIM DA ANÁLISE ---------');
-
-      // Retornar um objeto estruturado com resultado da análise
       return {
         query,
         success: true,
@@ -217,8 +156,6 @@ export const analyzeQuery = tool({
       const stackTrace =
         error instanceof Error ? error.stack : 'Sem stack trace';
       console.error(stackTrace || 'Sem stack trace');
-
-      // Em caso de erro, retornar objeto com status de falha
       return {
         query,
         success: false,
@@ -241,27 +178,19 @@ export const addToKnowledgeBase = tool({
     title: z.string().optional().describe('Título opcional para o conteúdo'),
   }),
   execute: async ({ content, title }) => {
-    console.log('--------- ADIÇÃO À BASE DE CONHECIMENTO ---------');
-    console.log(`Título: ${title || 'Sem título'}`);
-    console.log(`Tamanho do conteúdo: ${content.length} caracteres`);
-
     try {
       const fullContent = title ? `# ${title}\n\n${content}` : content;
       const result = await createResource({
         content: fullContent,
         sourceType: SourceType.TEXT,
       });
-
-      // Verificar se o resultado é uma mensagem de sucesso
       if (typeof result === 'string' && result.includes('successfully')) {
         return {
           success: true,
           message: 'Conteúdo adicionado com sucesso à base de conhecimento.',
-          resourceId: null, // Não temos o ID do recurso neste caso
+          resourceId: null,
         };
       }
-
-      // Se chegou aqui, algo deu errado
       return {
         success: false,
         message:
@@ -275,7 +204,6 @@ export const addToKnowledgeBase = tool({
       const stackTrace =
         error instanceof Error ? error.stack : 'Sem stack trace';
       console.error(stackTrace || 'Sem stack trace');
-
       return {
         success: false,
         message: `Erro ao adicionar conteúdo: ${errorMessage}`,

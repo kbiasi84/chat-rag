@@ -84,9 +84,6 @@ export async function upsertSubscription(
     const existingSubscription = await getUserSubscription(userId);
 
     if (existingSubscription) {
-      // Verificar se o plano mudou (apenas para logs)
-      const planChanged = existingSubscription.plano !== plano.toLowerCase();
-
       // Atualizar a assinatura existente
       await db
         .update(subscription)
@@ -96,21 +93,10 @@ export async function upsertSubscription(
           stripeCustomerId,
           stripeSubscriptionId,
           terminaEm,
-          // Zerar a contagem de consultas em todos os casos
           consultasUsadas: 0,
           atualizadoEm: new Date(),
         })
         .where(eq(subscription.id, existingSubscription.id));
-
-      // Log diferente dependendo se o plano mudou ou foi renovado
-      if (planChanged) {
-        console.log(
-          `Plano alterado de ${existingSubscription.plano} para ${plano}. Contagem de consultas zerada.`,
-        );
-      } else {
-        console.log(`Plano renovado: ${plano}. Contagem de consultas zerada.`);
-      }
-
       return existingSubscription.id;
     } else {
       // Criar uma nova assinatura
@@ -123,10 +109,9 @@ export async function upsertSubscription(
           stripeCustomerId,
           stripeSubscriptionId,
           terminaEm,
-          consultasUsadas: 0, // Sempre começa com zero consultas em uma nova assinatura
+          consultasUsadas: 0,
         })
         .returning({ id: subscription.id });
-
       return result.id;
     }
   } catch (error) {
@@ -140,29 +125,10 @@ export async function upsertSubscription(
  */
 export async function incrementConsultasUsadas(userId: string) {
   try {
-    console.log('[DEBUG] Incrementando consultas para usuário:', userId);
-
     const userSubscription = await getUserSubscription(userId);
-    console.log(
-      '[DEBUG] Assinatura encontrada:',
-      userSubscription ? 'Sim' : 'Não',
-    );
-
-    if (userSubscription) {
-      console.log('[DEBUG] Detalhes da assinatura:', {
-        id: userSubscription.id,
-        plano: userSubscription.plano,
-        status: userSubscription.status,
-        consultasUsadas: userSubscription.consultasUsadas,
-        stripeCustomerId: userSubscription.stripeCustomerId,
-        stripeSubscriptionId: userSubscription.stripeSubscriptionId,
-      });
-    }
-
     if (!userSubscription) {
       throw new Error('Assinatura não encontrada');
     }
-
     await db
       .update(subscription)
       .set({
@@ -170,10 +136,9 @@ export async function incrementConsultasUsadas(userId: string) {
         atualizadoEm: new Date(),
       })
       .where(eq(subscription.id, userSubscription.id));
-
     return userSubscription.consultasUsadas + 1;
   } catch (error) {
-    console.error('[DEBUG] Falha ao incrementar consultas usadas:', error);
+    console.error('Falha ao incrementar consultas usadas:', error);
     throw new Error('Não foi possível atualizar o contador de consultas');
   }
 }

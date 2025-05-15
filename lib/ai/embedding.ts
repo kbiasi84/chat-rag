@@ -124,32 +124,17 @@ export const generateEmbedding = async (value: string): Promise<number[]> => {
 
 export const findRelevantContent = async (userQuery: string) => {
   try {
-    console.log(`[EMBEDDING] Buscando conteúdo relevante para: "${userQuery}"`);
-
+    // Logs informativos removidos
     // Normalizar a consulta do usuário
     const normalizedQuery = userQuery.toLowerCase().trim();
-    console.log(`[EMBEDDING] Consulta normalizada: "${normalizedQuery}"`);
-
     try {
       // Gerar embedding para a consulta
-      console.log('[EMBEDDING] Gerando embedding para a consulta...');
       const userQueryEmbedded = await generateEmbedding(normalizedQuery);
-      console.log(
-        `[EMBEDDING] Embedding gerado com sucesso. Tamanho: ${userQueryEmbedded.length}`,
-      );
-
       // Calcular similaridade usando distância de cosseno
-      console.log('[EMBEDDING] Calculando similaridade com vetores na base...');
       const similarity = sql<number>`1 - (${cosineDistance(embeddings.embedding, userQueryEmbedded)})`;
-
       // Threshold de similaridade mais baixo para capturar mais resultados
       const similarityThreshold = 0.2;
-      console.log(
-        `[EMBEDDING] Usando threshold de similaridade: ${similarityThreshold}`,
-      );
-
       // Buscar fragmentos relevantes - buscamos mais para aplicar filtragem de qualidade
-      console.log('[EMBEDDING] Executando consulta ao banco de dados...');
       const similarContent = await db
         .select({
           content: embeddings.content,
@@ -159,96 +144,40 @@ export const findRelevantContent = async (userQuery: string) => {
         .from(embeddings)
         .where(gt(similarity, similarityThreshold))
         .orderBy((t) => desc(t.similarity))
-        .limit(20); // Buscamos mais para ter margem após filtragem
-
-      console.log(
-        `[EMBEDDING] Encontrados ${similarContent.length} fragmentos relevantes pela similaridade`,
-      );
-
-      // Log detalhado das similaridades encontradas
-      similarContent.forEach((item, idx) => {
-        console.log(
-          `[EMBEDDING] Fragmento #${idx + 1} - Similaridade: ${item.similarity}`,
-        );
-        if (item.content) {
-          console.log(
-            `[EMBEDDING] Conteúdo (primeiros 100 chars): ${item.content.substring(0, 100)}...`,
-          );
-        }
-      });
-
+        .limit(20);
       // Aplicar filtragem por qualidade de conteúdo
-      console.log(
-        '[EMBEDDING] Aplicando filtragem semântica aos fragmentos...',
-      );
-      const minQualityScore = 5; // Pontuação mínima de qualidade
+      const minQualityScore = 5;
       const filteredByQuality = filterLowQualityContent(
         similarContent,
         minQualityScore,
       );
-      console.log(
-        `[EMBEDDING] ${filteredByQuality.length} fragmentos restantes após filtragem semântica`,
-      );
-
       // Implementar diversidade de fontes e controle de tokens
       const processedResults = [];
       const resourceCount = new Map();
       let totalTokens = 0;
       const MAX_TOTAL_TOKENS = 2500;
-
-      // Processar os resultados já filtrados por qualidade
       for (const item of filteredByQuality) {
-        // Contagem PRECISA de tokens usando tiktoken
+        // Contagem precisa de tokens
         const fragmentTokens = countTokens(item.content, 'gpt-4o');
-        console.log(
-          `[TOKEN] Fragmento de ${item.content.length} caracteres tem ${fragmentTokens} tokens (ResourceID: ${item.resourceId})`,
-        );
-
         // Verificar limite de tokens
         if (totalTokens + fragmentTokens > MAX_TOTAL_TOKENS) {
-          console.log(
-            `[TOKEN] Limite de tokens atingido (${totalTokens}/${MAX_TOTAL_TOKENS}), parando processamento`,
-          );
           break;
         }
-
         // Controlar diversidade de fontes
         const currentCount = resourceCount.get(item.resourceId) || 0;
         if (currentCount >= 2) {
-          console.log(
-            `[TOKEN] Já existem 2 fragmentos do recurso ${item.resourceId}, pulando para promover diversidade`,
-          );
-          continue; // Máximo 2 fragmentos da mesma fonte
+          continue;
         }
-
-        // Adicionar ao resultado final
         processedResults.push({
           ...item,
-          tokenCount: fragmentTokens, // Adicionar a contagem de tokens ao resultado
+          tokenCount: fragmentTokens,
         });
         totalTokens += fragmentTokens;
         resourceCount.set(item.resourceId, currentCount + 1);
-
-        // Limitar a 6 resultados totais
         if (processedResults.length >= 6) {
-          console.log(
-            `[TOKEN] Atingido o limite de 6 fragmentos, parando processamento`,
-          );
           break;
         }
       }
-
-      // Log final dos fragmentos selecionados
-      console.log(
-        `[TOKEN] Retornando ${processedResults.length} fragmentos finais com EXATAMENTE ${totalTokens} tokens`,
-      );
-      processedResults.forEach((item, index) => {
-        console.log(
-          `[TOKEN] Fragmento final #${index + 1} - Similaridade: ${item.similarity.toFixed(4)} - ` +
-            `Qualidade: ${item.qualityScore.toFixed(1)} - Tokens: ${item.tokenCount} - ResourceID: ${item.resourceId}`,
-        );
-      });
-
       return processedResults;
     } catch (embeddingError: unknown) {
       console.error(

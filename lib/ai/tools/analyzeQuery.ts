@@ -12,11 +12,7 @@ export const analyzeQuery = tool({
     query: z.string().describe('A consulta do usuário'),
   }),
   execute: async ({ query }) => {
-    console.log('--------- ANÁLISE DE CONSULTA ---------');
-    console.log(`Consulta original: "${query}"`);
-
     try {
-      console.log('Gerando palavras-chave com IA...');
       const { object } = await generateObject({
         model: openai.completion('gpt-3.5-turbo-instruct'),
         schema: z.object({
@@ -28,12 +24,6 @@ export const analyzeQuery = tool({
         prompt: `Extraia até 5 palavras-chave importantes desta consulta: "${query}". Forneça apenas palavras individuais ou termos técnicos curtos que sejam relevantes para a busca em uma base de conhecimento.`,
       });
 
-      console.log(
-        `Palavras-chave extraídas: ${object.keywords?.join(', ') || 'nenhuma'}`,
-      );
-      console.log('--------- FIM DA ANÁLISE ---------');
-
-      // Retornar um objeto estruturado com resultado da análise
       return {
         query,
         success: true,
@@ -47,7 +37,6 @@ export const analyzeQuery = tool({
         error instanceof Error ? error.stack : 'Sem stack trace';
       console.error(stackTrace || 'Sem stack trace');
 
-      // Em caso de erro, retornar objeto com status de falha
       return {
         query,
         success: false,

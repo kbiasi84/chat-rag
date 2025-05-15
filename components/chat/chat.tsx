@@ -67,8 +67,10 @@ export function Chat({
         }
       }
 
-      // Para outros erros, manter o comportamento padrão
-      toast.error('Ocorreu um erro, tente novamente!');
+      // Para outros erros, manter o comportamento padrão, quando vai dar erro de rate limit
+      toast.error(
+        'Alta demanda de consultas no momento! Aguarde alguns instantes.',
+      );
     },
   });
 

@@ -50,25 +50,13 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    console.log('[DEBUG-CHAT] Usuário autenticado:', session.user.id);
-
     const userMessage = getMostRecentUserMessage(messages);
 
     if (!userMessage) {
       return Response.json({ error: 'No user message found' }, { status: 400 });
     }
 
-    console.log(
-      '[DEBUG-CHAT] Verificando limite de consultas para usuário:',
-      session.user.id,
-    );
     const resultado = await verificarLimiteConsulta(session.user.id);
-    console.log('[DEBUG-CHAT] Resultado da verificação:', {
-      permitido: resultado.permitido,
-      mensagem: resultado.mensagem,
-      consultasRestantes: resultado.consultasRestantes,
-      plano: resultado.plano,
-    });
 
     if (!resultado.permitido) {
       return Response.json(
@@ -83,131 +71,147 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log(
-      '[DEBUG-CHAT] Tentando incrementar consultas para usuário:',
-      session.user.id,
-    );
-    try {
-      await incrementConsultasUsadas(session.user.id);
-      console.log('[DEBUG-CHAT] Consultas incrementadas com sucesso');
-    } catch (error) {
-      console.error('[DEBUG-CHAT] Erro ao incrementar consultas:', error);
-      throw error;
-    }
+    await incrementConsultasUsadas(session.user.id);
 
     const chat = await getChatById({ id });
 
-    try {
-      if (!chat) {
-        const title = await generateTitleFromUserMessage({
-          message: userMessage,
-        });
-
-        await saveChat({ id, userId: session.user.id, title });
-      } else {
-        if (chat.userId !== session.user.id) {
-          return Response.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-      }
-
-      await saveMessages({
-        messages: [
-          {
-            chatId: id,
-            id: userMessage.id,
-            role: 'user',
-            parts: userMessage.parts,
-            attachments: userMessage.experimental_attachments ?? [],
-            createdAt: new Date(),
-          },
-        ],
+    if (!chat) {
+      const title = await generateTitleFromUserMessage({
+        message: userMessage,
       });
-    } catch (dbError) {
-      console.error('Erro ao interagir com o banco de dados:', dbError);
-      throw dbError;
+      await saveChat({ id, userId: session.user.id, title });
+    } else {
+      if (chat.userId !== session.user.id) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
+    await saveMessages({
+      messages: [
+        {
+          chatId: id,
+          id: userMessage.id,
+          role: 'user',
+          parts: userMessage.parts,
+          attachments: userMessage.experimental_attachments ?? [],
+          createdAt: new Date(),
+        },
+      ],
+    });
 
     return createDataStreamResponse({
       execute: (dataStream) => {
-        try {
-          const prompt = systemPrompt();
+        const prompt = systemPrompt();
 
-          const result = streamText({
-            model: myProvider.languageModel(selectedChatModel),
-            system: prompt,
-            messages,
-            maxSteps: 5,
-            experimental_activeTools: [
-              'analyzeQuery',
-              'getKnowledgeInfo',
-              'addToKnowledgeBase',
-            ],
-            experimental_transform: smoothStream({
-              chunking: 'word',
-              delayInMs: 15,
-            }),
-            experimental_generateMessageId: generateUUID,
-            tools: {
-              analyzeQuery,
-              getKnowledgeInfo,
-              addToKnowledgeBase,
-            },
-            onFinish: async ({ response }) => {
-              if (session.user?.id) {
-                try {
-                  const assistantId = getTrailingMessageId({
-                    messages: response.messages.filter(
-                      (message) => message.role === 'assistant',
-                    ),
-                  });
+        const fallbackOrder = [
+          { key: 'chat-dp', name: 'gpt-4o' },
+          { key: 'gpt-4.1-mini', name: 'gpt-4.1-mini' },
+          { key: 'gpt-4.1-nano', name: 'gpt-4.1-nano' },
+        ];
 
-                  if (!assistantId) {
-                    throw new Error('No assistant message found!');
-                  }
-
-                  const [, assistantMessage] = appendResponseMessages({
-                    messages: [userMessage],
-                    responseMessages: response.messages,
-                  });
-
-                  await saveMessages({
-                    messages: [
-                      {
-                        id: assistantId,
-                        chatId: id,
-                        role: assistantMessage.role,
-                        parts: assistantMessage.parts,
-                        attachments:
-                          assistantMessage.experimental_attachments ?? [],
-                        createdAt: new Date(),
-                      },
-                    ],
-                  });
-                } catch (saveError) {
-                  console.error('Falha ao salvar o chat:', saveError);
-                }
+        const doStreamCascade = async (options: any) => {
+          let lastError = null;
+          for (const model of fallbackOrder) {
+            try {
+              if (model.key === 'chat-dp') {
+                return await myProvider
+                  .languageModel('chat-dp')
+                  .doStream(options);
+              } else {
+                const { openai } = await import('@ai-sdk/openai');
+                return await openai(model.name).doStream(options);
               }
-            },
-            experimental_telemetry: {
-              isEnabled: isProductionEnvironment,
-              functionId: 'stream-text',
-            },
-          });
+            } catch (err: any) {
+              lastError = err;
+              if (err?.message?.toLowerCase().includes('rate limit')) {
+                continue;
+              } else {
+                throw err;
+              }
+            }
+          }
+          console.error(
+            '[FALLBACK][STREAM] Todos os modelos estão em alta demanda.',
+          );
+          throw new Error(
+            'Todos os modelos estão em alta demanda. Por favor, aguarde alguns minutos e tente novamente.',
+          );
+        };
 
-          result.consumeStream();
-          result.mergeIntoDataStream(dataStream);
-        } catch (streamError) {
-          console.error('Erro durante o streaming da resposta:', streamError);
-          throw streamError;
-        }
+        const originalModel = {
+          ...myProvider.languageModel('chat-dp'),
+          doStream: doStreamCascade,
+        };
+
+        const result = streamText({
+          model: originalModel,
+          system: prompt,
+          messages,
+          maxSteps: 5,
+          experimental_activeTools: [
+            'analyzeQuery',
+            'getKnowledgeInfo',
+            'addToKnowledgeBase',
+          ],
+          experimental_transform: smoothStream({
+            chunking: 'word',
+            delayInMs: 15,
+          }),
+          experimental_generateMessageId: generateUUID,
+          tools: {
+            analyzeQuery,
+            getKnowledgeInfo,
+            addToKnowledgeBase,
+          },
+          onFinish: async ({ response }) => {
+            if (session.user?.id) {
+              try {
+                const assistantId = getTrailingMessageId({
+                  messages: response.messages.filter(
+                    (message) => message.role === 'assistant',
+                  ),
+                });
+
+                if (!assistantId) {
+                  throw new Error('No assistant message found!');
+                }
+
+                const [, assistantMessage] = appendResponseMessages({
+                  messages: [userMessage],
+                  responseMessages: response.messages,
+                });
+
+                await saveMessages({
+                  messages: [
+                    {
+                      id: assistantId,
+                      chatId: id,
+                      role: assistantMessage.role,
+                      parts: assistantMessage.parts,
+                      attachments:
+                        assistantMessage.experimental_attachments ?? [],
+                      createdAt: new Date(),
+                    },
+                  ],
+                });
+              } catch (saveError) {
+                console.error('Falha ao salvar o chat:', saveError);
+              }
+            }
+          },
+          experimental_telemetry: {
+            isEnabled: isProductionEnvironment,
+            functionId: 'stream-text',
+          },
+        });
+
+        result.consumeStream();
+        result.mergeIntoDataStream(dataStream);
       },
-      onError: (error) => {
-        console.error('Erro no DataStream:', error);
+      onError: (error: unknown) => {
         return 'Oops, an error occured!';
       },
     });
   } catch (error) {
-    console.error('Erro geral na rota de API do chat:', error);
     return new Response('An error occurred while processing your request!', {
       status: 404,
     });
@@ -284,7 +288,6 @@ export async function PATCH(request: Request) {
 
     return new Response('Título atualizado com sucesso', { status: 200 });
   } catch (error) {
-    console.error('Erro ao atualizar título do chat:', error);
     return new Response('Ocorreu um erro ao processar sua solicitação', {
       status: 500,
     });
