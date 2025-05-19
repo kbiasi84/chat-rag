@@ -10,32 +10,6 @@ import { useMessages } from '@/hooks/use-messages';
 import useSWR from 'swr';
 import type { RefObject } from 'react';
 
-// Componente de depuração para testes - será visível apenas no desenvolvimento
-const ScrollDebugger = ({
-  status,
-  hasSentMessage,
-}: { status: string; hasSentMessage: boolean }) => {
-  if (process.env.NODE_ENV !== 'development') return null;
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 80,
-        right: 10,
-        backgroundColor: 'rgba(0,0,0,0.7)',
-        color: 'white',
-        padding: '5px 10px',
-        borderRadius: 5,
-        fontSize: 12,
-        zIndex: 1000,
-      }}
-    >
-      Status: {status} | hasSentMessage: {hasSentMessage.toString()}
-    </div>
-  );
-};
-
 interface MessagesProps {
   chatId: string;
   status: UseChatHelpers['status'];
@@ -147,9 +121,6 @@ function PureMessages({
         onViewportLeave={onViewportLeave}
         onViewportEnter={onViewportEnter}
       />
-
-      {/* Componente de depuração */}
-      <ScrollDebugger status={status} hasSentMessage={hasSentMessage} />
     </div>
   );
 }

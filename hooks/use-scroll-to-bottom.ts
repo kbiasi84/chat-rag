@@ -46,10 +46,6 @@ export function useScrollToBottom(
   const scrollToLastUserMessage = useCallback(() => {
     // Vamos garantir que temos as referências necessárias
     if (!containerRef.current || !userMessageRef.current) {
-      console.log('Refs não encontradas', {
-        container: !!containerRef.current,
-        userMessage: !!userMessageRef.current,
-      });
       return;
     }
 
@@ -71,13 +67,8 @@ export function useScrollToBottom(
         top: targetScrollTop,
         behavior: 'smooth',
       });
-
-      console.log('Rolagem executada', {
-        messageTop: userMessageTop,
-        scrollTarget: targetScrollTop,
-      });
     } catch (error) {
-      console.error('Erro ao rolar para mensagem do usuário:', error);
+      // Silenciosamente ignoramos erros
     }
   }, []);
 
@@ -97,7 +88,6 @@ export function useScrollToBottom(
   // Efeito disparado quando o status muda para 'submitted'
   useEffect(() => {
     if (status === 'submitted' && prevStatus !== 'submitted') {
-      console.log('Status mudou para submitted, preparando rolagem');
       setHasSentMessage(true);
       setShouldPreventAutoScroll(true);
 
@@ -105,11 +95,9 @@ export function useScrollToBottom(
       const delay = 100;
 
       setTimeout(() => {
-        console.log('Executando rolagem após delay', delay);
         scrollToLastUserMessage();
       }, delay);
     } else if (status === 'streaming' && prevStatus !== 'streaming') {
-      console.log('Streaming iniciado, garantindo posição da mensagem');
       // Vamos manter a posição da mensagem do usuário
       setShouldPreventAutoScroll(true);
     }
@@ -125,15 +113,12 @@ export function useScrollToBottom(
       const lastMessage = messages[messages.length - 1];
 
       if (lastMessage.role === 'user') {
-        console.log('Nova mensagem do usuário detectada');
-
         // Aguardamos a renderização
         setTimeout(() => {
           scrollToLastUserMessage();
         }, 100);
       } else if (lastMessage.role === 'assistant' && status === 'streaming') {
         // Durante streaming, manteremos a posição da mensagem do usuário
-        console.log('Nova mensagem do assistente detectada');
         maintainUserMessagePosition();
       }
 
