@@ -3,7 +3,7 @@
 import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo } from 'react';
+import { memo, type RefObject } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import { Markdown } from '../editor/markdown';
 import { MessageActions } from './message-actions';
@@ -20,7 +20,8 @@ const PurePreviewMessage = ({
   setMessages,
   reload,
   isReadonly,
-  status,
+  requiresScrollPadding,
+  scrollRef,
 }: {
   chatId: string;
   message: UIMessage;
@@ -29,15 +30,22 @@ const PurePreviewMessage = ({
   setMessages: UseChatHelpers['setMessages'];
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
-  status?: UseChatHelpers['status'];
+  requiresScrollPadding?: boolean;
+  scrollRef?:
+    | RefObject<HTMLDivElement>
+    | ((ref: HTMLDivElement | null) => void);
 }) => {
   return (
     <AnimatePresence>
       <motion.div
+        ref={scrollRef}
+        id={`message-${message.id}`}
         data-testid={`message-${message.role}`}
-        className="w-full mx-auto max-w-3xl px-4 group/message"
+        data-message-type={message.role}
+        className={`w-full mx-auto max-w-3xl px-4 group/message ${message.role === 'user' ? 'user-message' : 'assistant-message'}`}
         initial={{ y: 5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
+        exit={{ opacity: 0 }}
         data-role={message.role}
       >
         <div
@@ -60,7 +68,7 @@ const PurePreviewMessage = ({
             </div>
           )}
 
-          <div className="flex flex-col gap-4 w-full">
+          <div className={cn('flex flex-col gap-4 w-full')}>
             {/* Se for uma mensagem de assistente em carregamento, mostrar o texto de carregamento apropriado */}
             {message.role === 'assistant' &&
               isLoading &&
@@ -118,6 +126,8 @@ export const PreviewMessage = memo(
   (prevProps, nextProps) => {
     if (prevProps.isLoading !== nextProps.isLoading) return false;
     if (prevProps.message.id !== nextProps.message.id) return false;
+    if (prevProps.requiresScrollPadding !== nextProps.requiresScrollPadding)
+      return false;
     if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
     if (!equal(prevProps.vote, nextProps.vote)) return false;
 
@@ -129,21 +139,15 @@ export const ThinkingMessage = () => {
   const role = 'assistant';
 
   return (
-    <motion.div
+    <div
       data-testid="message-assistant-loading"
       className="w-full mx-auto max-w-3xl px-4 group/message"
-      initial={{ y: 5, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ opacity: 0 }}
       data-role={role}
     >
       <div
-        className={cx(
-          'flex gap-4 group-data-[role=user]/message:px-3 w-full group-data-[role=user]/message:w-fit group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl group-data-[role=user]/message:py-2 rounded-xl',
-          {
-            'group-data-[role=user]/message:bg-muted': true,
-          },
-        )}
+        className={cx('flex gap-4 w-full', {
+          'group-data-[role=user]/message:bg-muted': true,
+        })}
       >
         <div className="size-10 flex items-center rounded-full justify-center ring-1 shrink-0 ring-border overflow-hidden">
           <Image
@@ -161,7 +165,7 @@ export const ThinkingMessage = () => {
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

@@ -1,11 +1,40 @@
 import type { UIMessage } from 'ai';
-import { PreviewMessage } from './message';
-import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
+import { PreviewMessage, ThinkingMessage } from './message';
 import { Greeting } from './greeting';
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
+import { motion } from 'framer-motion';
+import { useMessages } from '@/hooks/use-messages';
+import useSWR from 'swr';
+import type { RefObject } from 'react';
+
+// Componente de depuração para testes - será visível apenas no desenvolvimento
+const ScrollDebugger = ({
+  status,
+  hasSentMessage,
+}: { status: string; hasSentMessage: boolean }) => {
+  if (process.env.NODE_ENV !== 'development') return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: 80,
+        right: 10,
+        backgroundColor: 'rgba(0,0,0,0.7)',
+        color: 'white',
+        padding: '5px 10px',
+        borderRadius: 5,
+        fontSize: 12,
+        zIndex: 1000,
+      }}
+    >
+      Status: {status} | hasSentMessage: {hasSentMessage.toString()}
+    </div>
+  );
+};
 
 interface MessagesProps {
   chatId: string;
@@ -15,6 +44,7 @@ interface MessagesProps {
   setMessages: UseChatHelpers['setMessages'];
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
+  isArtifactVisible: boolean;
 }
 
 function PureMessages({
@@ -25,74 +55,108 @@ function PureMessages({
   setMessages,
   reload,
   isReadonly,
+  isArtifactVisible,
 }: MessagesProps) {
-  const [messagesContainerRef, messagesEndRef] =
-    useScrollToBottom<HTMLDivElement>();
+  const {
+    containerRef: messagesContainerRef,
+    endRef: messagesEndRef,
+    onViewportEnter,
+    onViewportLeave,
+    setUserMessageRef,
+    hasSentMessage,
+    isAtBottom,
+    scrollToBottom,
+    scrollToUserMessage,
+  } = useMessages({
+    chatId,
+    status,
+    messages,
+  });
 
-  // Verificar se há alguma mensagem do assistente com conteúdo
-  const hasAssistantMessageWithContent = messages.some(
-    (msg) =>
-      msg.role === 'assistant' && msg.content && msg.content.trim() !== '',
-  );
+  // Gatilho adicional para tentar rolar para a mensagem do usuário
+  // quando a última mensagem for do usuário
+  useEffect(() => {
+    if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+      // Esperamos um pouco para garantir que o DOM foi renderizado
+      const timer = setTimeout(() => {
+        scrollToUserMessage();
+      }, 200);
 
-  // Mostrar indicador de carregamento apenas se:
-  // 1. O status for 'submitted' ou 'streaming'
-  // 2. E não houver nenhuma mensagem do assistente com conteúdo
-  const showLoadingIndicator =
-    (status === 'submitted' || status === 'streaming') &&
-    !hasAssistantMessageWithContent;
-
-  // Criar uma mensagem de carregamento quando necessário
-  const messagesWithLoading = [...messages];
-
-  // Adicionar uma mensagem de carregamento temporária se necessário
-  if (showLoadingIndicator && messages.length > 0) {
-    const lastMessage = messages[messages.length - 1];
-    // Só adicionar se a última mensagem for do usuário
-    if (lastMessage.role === 'user') {
-      messagesWithLoading.push({
-        id: 'loading-message',
-        role: 'assistant',
-        content: '',
-        parts: [],
-      });
+      return () => clearTimeout(timer);
     }
-  }
+  }, [messages, scrollToUserMessage]);
 
   return (
     <div
       ref={messagesContainerRef}
-      className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4"
+      className="flex flex-col min-w-0 gap-4 h-full overflow-y-auto py-6 px-4 relative"
     >
-      {messages.length === 0 && <Greeting />}
-
-      {messagesWithLoading.map((message, index) => (
-        <PreviewMessage
-          key={message.id}
-          chatId={chatId}
-          message={message}
-          isLoading={status === 'streaming' || message.id === 'loading-message'}
-          vote={
-            votes
-              ? votes.find((vote) => vote.messageId === message.id)
-              : undefined
-          }
-          setMessages={setMessages}
-          reload={reload}
-          isReadonly={isReadonly}
-          status={status}
-        />
-      ))}
-
       <div
+        className="flex flex-col min-w-0 gap-4 grow"
+        style={{
+          paddingBottom: messages.length > 3 ? 'calc(100vh - 350px)' : '0',
+        }}
+      >
+        {messages.length === 0 && <Greeting />}
+
+        {messages.map((message, index) => {
+          const isLastUserMessage =
+            message.role === 'user' && index === messages.length - 1;
+
+          return (
+            <PreviewMessage
+              key={message.id}
+              chatId={chatId}
+              message={message}
+              isLoading={
+                status === 'streaming' && messages.length - 1 === index
+              }
+              vote={
+                votes
+                  ? votes.find((vote) => vote.messageId === message.id)
+                  : undefined
+              }
+              setMessages={setMessages}
+              reload={reload}
+              isReadonly={isReadonly}
+              requiresScrollPadding={hasSentMessage && isLastUserMessage}
+              scrollRef={isLastUserMessage ? setUserMessageRef : undefined}
+            />
+          );
+        })}
+
+        {/* Lógica refinada para o ThinkingMessage - mais explícita */}
+        {(() => {
+          // Só mostrar o ThinkingMessage se tivermos mensagens e a última for do usuário
+          if (messages.length === 0) return null;
+          const lastMessage = messages[messages.length - 1];
+          if (status === 'submitted' && lastMessage.role === 'user') {
+            return (
+              <div className="mt-[-8px]">
+                <ThinkingMessage />
+              </div>
+            );
+          }
+          return null;
+        })()}
+      </div>
+
+      <motion.div
         ref={messagesEndRef}
-        className="shrink-0 min-w-[24px] min-h-[24px]"
+        className="shrink-0 min-w-[24px] min-h-[4px]"
+        onViewportLeave={onViewportLeave}
+        onViewportEnter={onViewportEnter}
       />
+
+      {/* Componente de depuração */}
+      <ScrollDebugger status={status} hasSentMessage={hasSentMessage} />
     </div>
   );
 }
 
 export const Messages = memo(PureMessages, (prevProps, nextProps) => {
+  if (prevProps.isArtifactVisible !== nextProps.isArtifactVisible) return false;
+
   if (prevProps.status !== nextProps.status) return false;
   if (prevProps.messages.length !== nextProps.messages.length) return false;
   if (!equal(prevProps.messages, nextProps.messages)) return false;
@@ -100,3 +164,12 @@ export const Messages = memo(PureMessages, (prevProps, nextProps) => {
 
   return true;
 });
+
+// Adicionamos esta exportação para poder acessar o status de isAtBottom e scrollToBottom do componente Chat
+export function useMessagesScroll(
+  chatId: string,
+  status: UseChatHelpers['status'],
+  messages?: Array<UIMessage>,
+) {
+  return useMessages({ chatId, status, messages });
+}

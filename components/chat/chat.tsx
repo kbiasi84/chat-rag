@@ -8,12 +8,13 @@ import { ChatHeader } from '@/components/chat/chat-header';
 import type { Vote } from '@/lib/db/schema';
 import { fetcher, generateUUID } from '@/lib/utils';
 import { MultimodalInput } from './multimodal-input';
-import { Messages } from './messages';
+import { Messages, useMessagesScroll } from './messages';
 import type { VisibilityType } from './visibility-selector';
 import { toast } from 'sonner';
 import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from '@/components/sidebar/sidebar-history';
 import { useQueryLimit } from '../providers/query-limit-provider';
+import { ScrollToBottomButton } from './scroll-to-bottom-button';
 
 export function Chat({
   id,
@@ -81,6 +82,9 @@ export function Chat({
 
   const [attachments] = useState<Array<Attachment>>([]);
 
+  // Obter o estado de rolagem das mensagens
+  const { isAtBottom, scrollToBottom } = useMessagesScroll(id, status);
+
   return (
     <div className="flex flex-col min-w-0 h-dvh bg-background">
       <ChatHeader
@@ -90,31 +94,42 @@ export function Chat({
         isReadonly={isReadonly}
       />
 
-      <Messages
-        chatId={id}
-        status={status}
-        votes={votes}
-        messages={messages}
-        setMessages={setMessages}
-        reload={reload}
-        isReadonly={isReadonly}
-      />
+      <div className="flex-1 overflow-y-auto">
+        <Messages
+          chatId={id}
+          status={status}
+          votes={votes}
+          messages={messages}
+          setMessages={setMessages}
+          reload={reload}
+          isReadonly={isReadonly}
+          isArtifactVisible={false}
+        />
+      </div>
 
-      <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
-        {!isReadonly && (
-          <MultimodalInput
-            chatId={id}
-            input={input}
-            setInput={setInput}
-            handleSubmit={handleSubmit}
-            status={status}
-            stop={stop}
-            messages={messages}
-            setMessages={setMessages}
-            append={append}
-          />
-        )}
-      </form>
+      <div className="relative">
+        {/* Botão de rolagem centralizado com o MultimodalInput */}
+        <ScrollToBottomButton
+          isAtBottom={isAtBottom}
+          scrollToBottom={scrollToBottom}
+        />
+
+        <form className="flex mx-auto px-4 bg-background pb-4 md:pb-6 gap-2 w-full md:max-w-3xl">
+          {!isReadonly && (
+            <MultimodalInput
+              chatId={id}
+              input={input}
+              setInput={setInput}
+              handleSubmit={handleSubmit}
+              status={status}
+              stop={stop}
+              messages={messages}
+              setMessages={setMessages}
+              append={append}
+            />
+          )}
+        </form>
+      </div>
     </div>
   );
 }
