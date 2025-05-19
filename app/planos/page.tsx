@@ -124,7 +124,7 @@ export default function PlanosPage() {
             </p>
 
             <div className="mt-4 mb-8">
-              <span className="text-4xl font-bold">R$ 59</span>
+              <span className="text-4xl font-bold">R$ 39</span>
               <span className="text-muted-foreground">/mês</span>
             </div>
 
@@ -182,7 +182,7 @@ export default function PlanosPage() {
             </p>
 
             <div className="mt-4 mb-8">
-              <span className="text-4xl font-bold">R$ 99</span>
+              <span className="text-4xl font-bold">R$ 69</span>
               <span className="text-muted-foreground">/mês</span>
             </div>
 
@@ -231,7 +231,7 @@ export default function PlanosPage() {
             <p className="text-muted-foreground mt-2">Para grandes empresas</p>
 
             <div className="mt-4 mb-8">
-              <span className="text-4xl font-bold">R$ 149</span>
+              <span className="text-4xl font-bold">R$ 99</span>
               <span className="text-muted-foreground">/mês</span>
             </div>
 

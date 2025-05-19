@@ -27,9 +27,9 @@ export const LIMITES_CONSULTA = {
 // Preços em centavos
 export const PRECOS_PLANOS = {
   [PLANOS.FREE]: 0,
-  [PLANOS.STARTER]: 5900,
-  [PLANOS.STANDARD]: 9900,
-  [PLANOS.ENTERPRISE]: 14900,
+  [PLANOS.STARTER]: 3900,
+  [PLANOS.STANDARD]: 6900,
+  [PLANOS.ENTERPRISE]: 9900,
 } as const;
 
 export const subscription = pgTable('subscription', {

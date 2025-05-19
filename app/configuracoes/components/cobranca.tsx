@@ -327,10 +327,10 @@ export default function CobrancaContent() {
                       {subscriptionData.plano !== PLANOS.FREE
                         ? `Mensal • R$ ${
                             subscriptionData.plano === 'starter'
-                              ? 59
+                              ? 39
                               : subscriptionData.plano === 'standard'
-                                ? 99
-                                : 149
+                                ? 69
+                                : 99
                           },00`
                         : 'Gratuito'}
                     </p>
