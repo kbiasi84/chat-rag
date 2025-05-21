@@ -8,6 +8,7 @@ import {
   createResource,
   deleteResource,
   getResourcesBySourceType,
+  updateResource,
 } from '@/lib/actions/resources';
 import {
   createLink,
@@ -20,6 +21,10 @@ import { uploadPdf } from '@/lib/actions/pdf';
 import { SourceType } from '@/lib/db/schema/resources';
 import { nanoid } from '@/lib/utils';
 import Link from 'next/link';
+import {
+  countTokens,
+  truncateToTokenLimit,
+} from '@/lib/ai/utils/token-counter';
 
 // Definindo o tipo para os recursos
 interface Resource {
@@ -42,6 +47,9 @@ interface WebLink {
   updatedAt: Date | string;
 }
 
+// Constante para o limite máximo de tokens
+const MAX_TOKEN_LIMIT = 500;
+
 export default function KnowledgeBasePage() {
   const [content, setContent] = useState('');
   const [title, setTitle] = useState('');
@@ -51,6 +59,8 @@ export default function KnowledgeBasePage() {
   const [activeTab, setActiveTab] = useState<'text' | 'pdf' | 'link'>('text');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [tokenCount, setTokenCount] = useState(0);
+  const [editingResource, setEditingResource] = useState<Resource | null>(null);
 
   // Estados para gerenciamento de links
   const [links, setLinks] = useState<WebLink[]>([]);
@@ -69,6 +79,12 @@ export default function KnowledgeBasePage() {
     loadResourcesByType();
     loadLinks();
   }, []);
+
+  // Atualizar contagem de tokens sempre que o conteúdo mudar
+  useEffect(() => {
+    const count = countTokens(content);
+    setTokenCount(count);
+  }, [content]);
 
   const loadResourcesByType = async () => {
     setIsLoading(true);
@@ -90,10 +106,58 @@ export default function KnowledgeBasePage() {
     setLinks(data);
   };
 
+  // Função para limitar o texto conforme o usuário digita
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newContent = e.target.value;
+    const count = countTokens(newContent);
+
+    if (count <= MAX_TOKEN_LIMIT) {
+      setContent(newContent);
+      setTokenCount(count);
+    } else {
+      // Se exceder o limite, truncar o texto para o limite máximo
+      const truncatedContent = truncateToTokenLimit(
+        newContent,
+        MAX_TOKEN_LIMIT,
+      );
+      setContent(truncatedContent);
+      setTokenCount(countTokens(truncatedContent));
+      toast.info(`Limite de ${MAX_TOKEN_LIMIT} tokens atingido`);
+    }
+  };
+
+  // Função para carregar um recurso para edição
+  const handleEditResource = (resource: Resource) => {
+    // Extrair título se existir (formato: # Título\n\nConteúdo)
+    let extractedTitle = '';
+    let extractedContent = resource.content;
+
+    if (resource.content.startsWith('# ')) {
+      const contentParts = resource.content.split('\n\n');
+      if (contentParts.length > 1) {
+        extractedTitle = contentParts[0].replace(/^# /, '');
+        extractedContent = contentParts.slice(1).join('\n\n');
+      }
+    }
+
+    setTitle(extractedTitle);
+    setContent(extractedContent);
+    setEditingResource(resource);
+    setActiveTab('text'); // Mudar para a aba de texto
+
+    // Rolar para o topo da página para mostrar o formulário
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) {
       toast.error('O conteúdo não pode estar vazio');
+      return;
+    }
+
+    if (tokenCount > MAX_TOKEN_LIMIT) {
+      toast.error(`O conteúdo excede o limite de ${MAX_TOKEN_LIMIT} tokens`);
       return;
     }
 
@@ -102,22 +166,43 @@ export default function KnowledgeBasePage() {
       // Adiciona título se existir
       const fullContent = title.trim() ? `# ${title}\n\n${content}` : content;
 
-      // Gerar um ID único para o conteúdo de texto, assim como é feito para PDFs
-      const textId = nanoid();
+      if (editingResource) {
+        // Lógica para atualizar recurso existente
+        const result = await updateResource({
+          id: editingResource.id,
+          content: fullContent,
+        });
 
-      const result = await createResource({
-        content: fullContent,
-        sourceType: SourceType.TEXT,
-        sourceId: textId,
-      });
-
-      if (typeof result === 'string' && result.includes('successfully')) {
-        toast.success('Conteúdo adicionado com sucesso');
-        setContent('');
-        setTitle('');
-        loadResourcesByType();
+        if (typeof result === 'string' && result.includes('success')) {
+          toast.success('Conteúdo atualizado com sucesso');
+          setContent('');
+          setTitle('');
+          setTokenCount(0);
+          setEditingResource(null);
+          loadResourcesByType();
+        } else {
+          toast.error('Erro ao atualizar conteúdo');
+        }
       } else {
-        toast.error('Erro ao adicionar conteúdo');
+        // Lógica existente para criar novo recurso
+        // Gerar um ID único para o conteúdo de texto, assim como é feito para PDFs
+        const textId = nanoid();
+
+        const result = await createResource({
+          content: fullContent,
+          sourceType: SourceType.TEXT,
+          sourceId: textId,
+        });
+
+        if (typeof result === 'string' && result.includes('successfully')) {
+          toast.success('Conteúdo adicionado com sucesso como um único chunk');
+          setContent('');
+          setTitle('');
+          setTokenCount(0);
+          loadResourcesByType();
+        } else {
+          toast.error('Erro ao adicionar conteúdo');
+        }
       }
     } catch (error) {
       console.error(error);
@@ -355,26 +440,58 @@ export default function KnowledgeBasePage() {
                   htmlFor="content"
                   className="block text-sm font-medium mb-2 dark:text-neutral-200"
                 >
-                  Conteúdo
+                  Conteúdo (máximo {MAX_TOKEN_LIMIT} tokens)
                 </label>
                 <Textarea
                   id="content"
                   value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  onChange={handleContentChange}
                   rows={10}
-                  placeholder="Insira o texto do documento, legislação, modelo de contrato ou qualquer outro conteúdo para a base de conhecimento"
+                  placeholder={`Insira texto (máximo ${MAX_TOKEN_LIMIT} tokens). Este será armazenado como um único chunk.`}
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1 dark:text-neutral-400">
-                  Para melhor processamento, insira textos completos e bem
-                  formatados.
-                </p>
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-xs text-gray-500 dark:text-neutral-400">
+                    Para melhor processamento, insira textos concisos e bem
+                    formatados.
+                  </p>
+                  <p
+                    className={`text-sm ${tokenCount > MAX_TOKEN_LIMIT ? 'text-red-500 font-semibold' : tokenCount > MAX_TOKEN_LIMIT * 0.9 ? 'text-amber-500' : 'text-green-600'}`}
+                  >
+                    {tokenCount} / {MAX_TOKEN_LIMIT} tokens
+                  </p>
+                </div>
               </div>
-              <Button type="submit" disabled={isSubmitting || !content.trim()}>
-                {isSubmitting
-                  ? 'Processando...'
-                  : 'Adicionar à Base de Conhecimento'}
-              </Button>
+              <div className="flex space-x-2">
+                <Button
+                  type="submit"
+                  disabled={
+                    isSubmitting ||
+                    !content.trim() ||
+                    tokenCount > MAX_TOKEN_LIMIT
+                  }
+                >
+                  {isSubmitting
+                    ? 'Processando...'
+                    : editingResource
+                      ? 'Atualizar Chunk'
+                      : 'Adicionar como Chunk Único'}
+                </Button>
+                {editingResource && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingResource(null);
+                      setContent('');
+                      setTitle('');
+                      setTokenCount(0);
+                    }}
+                  >
+                    Cancelar Edição
+                  </Button>
+                )}
+              </div>
             </form>
           ) : activeTab === 'pdf' ? (
             <form onSubmit={handlePdfUpload} className="space-y-4">
@@ -571,11 +688,11 @@ export default function KnowledgeBasePage() {
               {activeTab === 'text' && (
                 <>
                   <h3 className="text-md font-medium mb-3 dark:text-neutral-300">
-                    Conteúdos Adicionados via Texto
+                    Chunks de Texto Adicionados Manualmente
                   </h3>
                   {textResources.length === 0 ? (
                     <p className="text-center py-6 text-neutral-500 dark:text-neutral-400">
-                      Nenhum conteúdo de texto adicionado.
+                      Nenhum chunk de texto adicionado.
                     </p>
                   ) : (
                     <div className="space-y-4 mb-8">
@@ -584,6 +701,7 @@ export default function KnowledgeBasePage() {
                           key={resource.id}
                           resource={resource}
                           onDelete={handleDelete}
+                          onEdit={handleEditResource}
                         />
                       ))}
                     </div>
@@ -674,6 +792,7 @@ export default function KnowledgeBasePage() {
                           resource={resource}
                           onDelete={handleDelete}
                           hideDelete={true}
+                          onEdit={handleEditResource}
                         />
                       ))}
                     </div>
@@ -692,12 +811,17 @@ export default function KnowledgeBasePage() {
 const ResourceItem = ({
   resource,
   onDelete,
+  onEdit,
   hideDelete = false,
 }: {
   resource: Resource;
   onDelete: (id: string) => void;
+  onEdit?: (resource: Resource) => void;
   hideDelete?: boolean;
 }) => {
+  // Calculando tokens do conteúdo do recurso
+  const resourceTokens = countTokens(resource.content);
+
   return (
     <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
       <div className="flex justify-between">
@@ -707,27 +831,42 @@ const ResourceItem = ({
               ? `${resource.content.substring(0, 200)}...`
               : resource.content}
           </p>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
-            Adicionado em:{' '}
-            {new Date(resource.createdAt).toLocaleDateString('pt-BR', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </p>
+          <div className="flex justify-between items-center mt-2">
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              Adicionado em:{' '}
+              {new Date(resource.createdAt).toLocaleDateString('pt-BR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+            <p className="text-xs text-blue-500">{resourceTokens} tokens</p>
+          </div>
         </div>
-        {!hideDelete && (
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => onDelete(resource.id)}
-            className="ml-4 self-start"
-          >
-            Excluir
-          </Button>
-        )}
+        <div className="flex flex-col space-y-2">
+          {resource.sourceType === SourceType.TEXT && onEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEdit(resource)}
+              className="ml-4 self-start"
+            >
+              Editar
+            </Button>
+          )}
+          {!hideDelete && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => onDelete(resource.id)}
+              className="ml-4 self-start"
+            >
+              Excluir
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

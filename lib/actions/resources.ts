@@ -1,7 +1,7 @@
 'use server';
 
+import type { NewResourceParams } from '@/lib/db/schema/resources';
 import {
-  NewResourceParams,
   insertResourceSchemaWithOptionalSourceId,
   resources,
   SourceType,
@@ -14,12 +14,10 @@ import { sql } from 'drizzle-orm';
 export const createResource = async (input: NewResourceParams) => {
   try {
     console.log('Iniciando criação do recurso...');
-    //console.log('Input recebido:', JSON.stringify(input));
 
     try {
       // Usar o schema com sourceId opcional
       const parsed = insertResourceSchemaWithOptionalSourceId.parse(input);
-      //console.log('Schema validado com sucesso:', JSON.stringify(parsed));
 
       const { content, sourceType = SourceType.TEXT, sourceId } = parsed;
       console.log(`Tamanho do conteúdo: ${content.length} caracteres`);
@@ -34,7 +32,10 @@ export const createResource = async (input: NewResourceParams) => {
       console.log(`Recurso criado com ID: ${resource.id}`);
 
       console.log('Gerando embeddings para o conteúdo...');
-      const embeddings = await generateEmbeddings(content);
+      const embeddings = await generateEmbeddings(
+        content,
+        sourceType || undefined,
+      );
       console.log(`Gerados ${embeddings.length} fragmentos de embeddings`);
 
       // Inserir embeddings em lotes para evitar exceder limites
@@ -134,5 +135,78 @@ export const deleteResourcesBySourceId = async (sourceId: string) => {
   } catch (error) {
     console.error(`Error deleting resources with sourceId ${sourceId}:`, error);
     return 'Erro ao excluir recursos associados.';
+  }
+};
+
+// Interface para atualização de recurso
+interface UpdateResourceParams {
+  id: string;
+  content: string;
+}
+
+export const updateResource = async (input: UpdateResourceParams) => {
+  try {
+    console.log('Iniciando atualização do recurso...');
+
+    const { id, content } = input;
+
+    // Buscar o recurso original para obter o sourceType
+    const [existingResource] = await db
+      .select()
+      .from(resources)
+      .where(sql`id = ${id}`);
+
+    if (!existingResource) {
+      return 'Recurso não encontrado.';
+    }
+
+    // Atualizar o conteúdo do recurso
+    await db
+      .update(resources)
+      .set({
+        content,
+        updatedAt: new Date(),
+      })
+      .where(sql`id = ${id}`);
+
+    // Excluir embeddings antigos
+    await db.delete(embeddingsTable).where(sql`resource_id = ${id}`);
+
+    // Gerar novos embeddings
+    console.log('Gerando novos embeddings para o conteúdo atualizado...');
+    const embeddings = await generateEmbeddings(
+      content,
+      existingResource.sourceType || undefined,
+    );
+    console.log(`Gerados ${embeddings.length} fragmentos de embeddings`);
+
+    // Inserir novos embeddings
+    const batchSize = 100;
+    for (let i = 0; i < embeddings.length; i += batchSize) {
+      const batch = embeddings.slice(i, i + batchSize);
+      console.log(
+        `Inserindo lote de embeddings ${i + 1}-${i + batch.length} de ${embeddings.length}`,
+      );
+
+      await db.insert(embeddingsTable).values(
+        batch.map((embedding) => ({
+          resourceId: id,
+          ...embedding,
+        })),
+      );
+
+      if (i + batchSize < embeddings.length) {
+        console.log('Pausa entre lotes para evitar sobrecarga...');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    console.log('Recurso atualizado com sucesso');
+    return 'Resource successfully updated.';
+  } catch (error) {
+    console.error('Erro ao atualizar recurso:', error);
+    return error instanceof Error && error.message.length > 0
+      ? error.message
+      : 'Error, please try again.';
   }
 };

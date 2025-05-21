@@ -5,6 +5,7 @@ import { embeddings } from '../db/schema/embeddings';
 import { db } from '../db';
 import { filterLowQualityContent } from './utils/content-quality';
 import { countTokens } from './utils/token-counter';
+import { SourceType } from '../db/schema/resources';
 
 // Atualizar para modelo mais recente de embeddings
 const embeddingModel = openai.embedding('text-embedding-3-small');
@@ -13,7 +14,12 @@ const embeddingModel = openai.embedding('text-embedding-3-small');
 const MAX_CHUNK_SIZE = 1000;
 
 // Função melhorada para dividir texto em pedaços menores
-const generateChunks = (input: string): string[] => {
+const generateChunks = (input: string, sourceType?: string): string[] => {
+  // Se for conteúdo de fonte de texto manual (da aba de texto na interface), retornar como um único chunk
+  if (sourceType === SourceType.TEXT) {
+    return [input];
+  }
+
   // Limpar o texto
   const cleanText = input.trim().replace(/\s+/g, ' ');
 
@@ -78,8 +84,9 @@ const generateChunks = (input: string): string[] => {
 
 export const generateEmbeddings = async (
   value: string,
+  sourceType?: string,
 ): Promise<Array<{ embedding: number[]; content: string }>> => {
-  const chunks = generateChunks(value);
+  const chunks = generateChunks(value, sourceType);
 
   // Processando chunks em lotes para evitar exceder limites
   const results: Array<{ embedding: number[]; content: string }> = [];
