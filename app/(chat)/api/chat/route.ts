@@ -29,8 +29,31 @@ import {
 } from '@/lib/ai/tools/query-knowledge-base';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
+import {
+  sendKnowledgeInclusionRequest,
+  createKnowledgeRequest,
+} from '@/lib/email-incluir-base';
 
 export const maxDuration = 60;
+
+// Função auxiliar para extrair texto das parts de forma segura
+function extractTextFromParts(parts: UIMessage['parts']): string {
+  if (!parts) return '';
+
+  return parts
+    .map((part) => {
+      if (typeof part === 'string') {
+        return part;
+      }
+      // Verificar se a part tem propriedade text (TextUIPart)
+      if ('text' in part && typeof part.text === 'string') {
+        return part.text;
+      }
+      // Para outros tipos de parts, retornar string vazia
+      return '';
+    })
+    .join(' ');
+}
 
 export async function POST(request: Request) {
   try {
@@ -179,6 +202,52 @@ export async function POST(request: Request) {
                   messages: [userMessage],
                   responseMessages: response.messages,
                 });
+
+                // Verificar se a resposta indica que não foi encontrada informação na base de conhecimento
+                const assistantContent = extractTextFromParts(
+                  assistantMessage.parts || [],
+                );
+
+                const isKnowledgeNotFound = assistantContent.includes(
+                  'Ainda não fui treinada com esse conhecimento específico para suporte',
+                );
+
+                // Se não encontrou conhecimento, enviar email de notificação
+                if (isKnowledgeNotFound) {
+                  try {
+                    const userQuestion = extractTextFromParts(
+                      userMessage.parts || [],
+                    );
+
+                    const knowledgeRequest = createKnowledgeRequest(
+                      userQuestion,
+                      {
+                        userEmail: session.user.email || undefined,
+                        userId: session.user.id,
+                        sessionId: id, // usando o chatId como sessionId
+                      },
+                    );
+
+                    // Enviar email de forma assíncrona para não bloquear a resposta
+                    sendKnowledgeInclusionRequest(knowledgeRequest).catch(
+                      (emailError) => {
+                        console.error(
+                          'Erro ao enviar email de solicitação de conhecimento:',
+                          emailError,
+                        );
+                      },
+                    );
+
+                    console.log(
+                      `Email de solicitação de conhecimento enviado para pergunta: ${userQuestion.substring(0, 100)}...`,
+                    );
+                  } catch (emailError) {
+                    console.error(
+                      'Erro ao processar envio de email de conhecimento:',
+                      emailError,
+                    );
+                  }
+                }
 
                 await saveMessages({
                   messages: [
