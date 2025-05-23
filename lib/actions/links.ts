@@ -3,20 +3,18 @@
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
 import { eq, sql } from 'drizzle-orm';
-import { db } from '../db';
+import { db } from '@/lib/db';
 import {
   links,
   type NewLinkParams,
   insertLinkSchema,
-} from '../db/schema/links';
-import {
-  createResource,
-  getResourcesBySourceId,
-  deleteResourcesBySourceId,
-} from './resources';
+} from '@/lib/db/schema/links';
+import { getResourcesBySourceId, deleteResourcesBySourceId } from './resources';
 import type { Response as FetchResponse } from 'node-fetch';
 import iconv from 'iconv-lite';
-import { SourceType } from '../db/schema/resources';
+import { SourceType, resources } from '@/lib/db/schema/resources';
+import { generateEmbeddings } from '@/lib/ai/embedding';
+import { embeddings as embeddingsTable } from '@/lib/db/schema/embeddings';
 
 export const createLink = async (input: NewLinkParams) => {
   try {
@@ -234,9 +232,20 @@ async function processLinkContent(linkId: string) {
       ).remove();
       console.log('Elementos desnecessários removidos');
 
-      // --- NOVO: Extração de tabelas como markdown + contexto ---
-      const tableChunks: string[] = [];
+      // Extrai o texto principal
+      const bodyText = $('body').text().trim();
+      console.log('Texto extraído, tamanho:', bodyText.length);
+
+      // --- Processamento de tabelas como parte do texto ---
+      // Extrair tabelas como markdown e reintegrá-las no texto em posições apropriadas
+      const tablesMarkdown: Array<{
+        markdown: string;
+        index: number; // posição aproximada no documento
+      }> = [];
+
+      // Extrair as tabelas primeiro
       $('table').each((i, table) => {
+        // Converter tabela para markdown
         const rows: string[] = [];
         $(table)
           .find('tr')
@@ -249,6 +258,7 @@ async function processLinkContent(linkId: string) {
               });
             rows.push(`| ${cells.join(' | ')} |`);
           });
+
         // Adiciona separador de cabeçalho se houver cabeçalho
         if (rows.length > 1) {
           const headerSep = `| ${rows[0]
@@ -258,81 +268,75 @@ async function processLinkContent(linkId: string) {
             .join(' | ')} |`;
           rows.splice(1, 0, headerSep);
         }
-        const markdownTable = `${rows.join('\n')}`;
-        // Captura o contexto imediatamente anterior à tabela
-        let context = '';
-        let prev = $(table).prev();
-        // Procura até 2 elementos anteriores relevantes (h1-h6, p, strong, em, span, texto)
-        const contextParts: string[] = [];
-        let contextTries = 0;
-        while (prev.length && contextTries < 2) {
-          const tag = prev[0].tagName?.toLowerCase();
-          if (
-            [
-              'h1',
-              'h2',
-              'h3',
-              'h4',
-              'h5',
-              'h6',
-              'p',
-              'strong',
-              'em',
-              'span',
-            ].includes(tag)
-          ) {
-            const txt = prev.text().trim();
-            if (txt.length > 0) contextParts.unshift(txt);
-          }
-          prev = prev.prev();
-          contextTries++;
-        }
-        if (contextParts.length > 0) {
-          context = contextParts.join('\n');
-        }
-        const chunkContent = context
-          ? `${context}\n\n${markdownTable}`
-          : `${markdownTable}`;
-        tableChunks.push(chunkContent);
+
+        const markdownTable = rows.join('\n');
+
+        // Encontrar a posição da tabela no documento para manter a ordem relativa
+        const prevAll = $('*').toArray();
+        const tableIndex = prevAll.findIndex((el) => el === table);
+
+        tablesMarkdown.push({
+          markdown: markdownTable,
+          index: tableIndex,
+        });
       });
-      console.log(
-        `Extraídas ${tableChunks.length} tabelas do HTML (com contexto)`,
-      );
 
-      // Extrai o texto principal
-      const bodyText = $('body').text().trim();
-      console.log('Texto extraído, tamanho:', bodyText.length);
+      console.log(`Extraídas ${tablesMarkdown.length} tabelas como markdown`);
 
-      // Normalizar caracteres especiais
+      // Normalizar caracteres especiais do texto principal
       const cleanText = bodyText
         .replace(/\s+/g, ' ') // Remove espaços extras
         .replace(/\n+/g, '\n') // Remove quebras de linha extras
         .normalize('NFC') // Normaliza caracteres compostos
         .trim();
 
-      // Formata o conteúdo
-      const content = `# ${link.title}\n\nURL: ${link.url}\n\n${cleanText}`;
-      console.log('Conteúdo formatado, tamanho final:', content.length);
+      // Formatar o conteúdo principal com as tabelas incorporadas
+      let enhancedContent = `# ${link.title}\n\nURL: ${link.url}\n\n${cleanText}`;
+
+      // Adicionar tabelas como apêndices com referências claras
+      if (tablesMarkdown.length > 0) {
+        enhancedContent += '\n\n## Tabelas Relacionadas\n\n';
+
+        tablesMarkdown.forEach((table, index) => {
+          enhancedContent += `### Tabela ${index + 1}\n\n${table.markdown}\n\n`;
+        });
+      }
+
+      console.log(
+        'Conteúdo formatado com tabelas incorporadas, tamanho final:',
+        enhancedContent.length,
+      );
 
       // Adiciona à base de conhecimento com tipo e ID de origem
-      console.log('Criando recurso na base de conhecimento...');
-      const result = await createResource({
-        content,
-        sourceType: SourceType.LINK,
-        sourceId: linkId,
-      });
-      console.log('Recurso criado com sucesso:', result);
-
-      // Salva cada tabela como chunk separado, se houver
-      for (const markdownTable of tableChunks) {
-        const tableContent = `# ${link.title} (Tabela)\n\nURL: ${link.url}\n\n${markdownTable}`;
-        await createResource({
-          content: tableContent,
+      console.log('Criando recurso principal na base de conhecimento...');
+      const [mainResource] = await db
+        .insert(resources)
+        .values({
+          content: enhancedContent,
           sourceType: SourceType.LINK,
           sourceId: linkId,
-        });
-        console.log('Tabela salva como recurso separado.');
-      }
+        })
+        .returning();
+      console.log(`Recurso principal criado com ID: ${mainResource.id}`);
+
+      // Gerar embeddings para o conteúdo completo
+      console.log('Gerando embeddings para o conteúdo completo...');
+      const contentEmbeddings = await generateEmbeddings(
+        enhancedContent,
+        SourceType.LINK,
+      );
+      console.log(
+        `Gerados ${contentEmbeddings.length} fragmentos de embeddings para o conteúdo completo`,
+      );
+
+      // Inserir embeddings do conteúdo
+      await db.insert(embeddingsTable).values(
+        contentEmbeddings.map((embedding) => ({
+          resourceId: mainResource.id,
+          ...embedding,
+        })),
+      );
+      console.log('Embeddings do conteúdo inseridos com sucesso');
 
       // Atualiza o timestamp de processamento
       console.log('Atualizando timestamp de processamento do link...');

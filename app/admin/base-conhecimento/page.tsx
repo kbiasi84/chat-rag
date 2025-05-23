@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,10 +17,8 @@ import {
   refreshLink,
 } from '@/lib/actions/links';
 import { toast } from 'sonner';
-import { uploadPdf } from '@/lib/actions/pdf';
 import { SourceType } from '@/lib/db/schema/resources';
 import { nanoid } from '@/lib/utils';
-import Link from 'next/link';
 import {
   countTokens,
   truncateToTokenLimit,
@@ -47,19 +45,13 @@ interface WebLink {
   updatedAt: Date | string;
 }
 
-// Constante para o limite máximo de tokens
-const MAX_TOKEN_LIMIT = 500;
+// Constante para o limite máximo de tokens para chunks manuais
+const MAX_MANUAL_CHUNK_TOKENS = 800;
 
 export default function KnowledgeBasePage() {
-  const [content, setContent] = useState('');
-  const [title, setTitle] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'text' | 'pdf' | 'link'>('text');
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
-  const [tokenCount, setTokenCount] = useState(0);
+  const [activeTab, setActiveTab] = useState<'manual' | 'link'>('manual');
   const [editingResource, setEditingResource] = useState<Resource | null>(null);
 
   // Estados para gerenciamento de links
@@ -70,21 +62,84 @@ export default function KnowledgeBasePage() {
   const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [isRefreshingLink, setIsRefreshingLink] = useState<string | null>(null);
 
-  // Sobrescrevendo o estado de recursos para ter recursos por tipo
-  const [textResources, setTextResources] = useState<Resource[]>([]);
+  // Estados para chunk manual
+  const [manualChunk, setManualChunk] = useState('');
+  const [manualTitle, setManualTitle] = useState('');
+  const [manualLaw, setManualLaw] = useState('');
+  const [manualContext, setManualContext] = useState('');
+  const [manualTags, setManualTags] = useState('');
+  const [manualCategory, setManualCategory] = useState('');
+  const [manualHierarchy, setManualHierarchy] = useState('');
+  const [manualTokenCount, setManualTokenCount] = useState(0);
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+  const [previewManualChunk, setPreviewManualChunk] = useState('');
+
+  // Estados de recursos por tipo
   const [linkResources, setLinkResources] = useState<Resource[]>([]);
-  const [pdfResources, setPdfResources] = useState<Resource[]>([]);
+  const [manualResources, setManualResources] = useState<Resource[]>([]);
 
   useEffect(() => {
     loadResourcesByType();
     loadLinks();
   }, []);
 
-  // Atualizar contagem de tokens sempre que o conteúdo mudar
+  // Atualizar contagem de tokens para chunk manual
+  const generateManualChunkPreview = useCallback(() => {
+    let preview = '';
+
+    if (manualTitle.trim()) {
+      preview += `# ${manualTitle.trim()}\n\n`;
+    }
+
+    if (manualLaw.trim()) {
+      preview += `**Lei:** ${manualLaw.trim()}\n\n`;
+    }
+
+    if (manualHierarchy.trim()) {
+      preview += `**Hierarquia:** ${manualHierarchy.trim()}\n\n`;
+    }
+
+    if (manualContext.trim()) {
+      preview += `**Contexto:** ${manualContext.trim()}\n\n`;
+    }
+
+    preview += manualChunk;
+
+    if (manualCategory.trim()) {
+      preview += `\n\n**Categoria:** ${manualCategory.trim()}`;
+    }
+
+    if (manualTags.trim()) {
+      preview += `\n\n**Tags:** ${manualTags.trim()}`;
+    }
+
+    setPreviewManualChunk(preview);
+  }, [
+    manualChunk,
+    manualTitle,
+    manualLaw,
+    manualContext,
+    manualTags,
+    manualCategory,
+    manualHierarchy,
+  ]);
+
   useEffect(() => {
-    const count = countTokens(content);
-    setTokenCount(count);
-  }, [content]);
+    const count = countTokens(manualChunk);
+    setManualTokenCount(count);
+
+    // Gerar preview do chunk final
+    generateManualChunkPreview();
+  }, [
+    manualChunk,
+    manualTitle,
+    manualLaw,
+    manualContext,
+    manualTags,
+    manualCategory,
+    manualHierarchy,
+    generateManualChunkPreview,
+  ]);
 
   const loadResourcesByType = async () => {
     setIsLoading(true);
@@ -92,11 +147,14 @@ export default function KnowledgeBasePage() {
     // Buscar recursos por tipo
     const textData = await getResourcesBySourceType(SourceType.TEXT);
     const linkData = await getResourcesBySourceType(SourceType.LINK);
-    const pdfData = await getResourcesBySourceType(SourceType.PDF);
 
-    setTextResources(textData);
+    // Separar recursos manuais (que têm sourceId começando com 'manual-')
+    const manualData = textData.filter((resource) =>
+      resource.sourceId?.startsWith('manual-'),
+    );
+
     setLinkResources(linkData);
-    setPdfResources(pdfData);
+    setManualResources(manualData);
 
     setIsLoading(false);
   };
@@ -106,183 +164,172 @@ export default function KnowledgeBasePage() {
     setLinks(data);
   };
 
-  // Função para limitar o texto conforme o usuário digita
-  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newContent = e.target.value;
-    const count = countTokens(newContent);
-
-    if (count <= MAX_TOKEN_LIMIT) {
-      setContent(newContent);
-      setTokenCount(count);
-    } else {
-      // Se exceder o limite, truncar o texto para o limite máximo
-      const truncatedContent = truncateToTokenLimit(
-        newContent,
-        MAX_TOKEN_LIMIT,
-      );
-      setContent(truncatedContent);
-      setTokenCount(countTokens(truncatedContent));
-      toast.info(`Limite de ${MAX_TOKEN_LIMIT} tokens atingido`);
-    }
-  };
-
   // Função para carregar um recurso para edição
   const handleEditResource = (resource: Resource) => {
-    // Extrair título se existir (formato: # Título\n\nConteúdo)
-    let extractedTitle = '';
-    let extractedContent = resource.content;
+    // Verificar se é um chunk manual
+    const isManualChunk = resource.sourceId?.startsWith('manual-');
 
-    if (resource.content.startsWith('# ')) {
-      const contentParts = resource.content.split('\n\n');
-      if (contentParts.length > 1) {
-        extractedTitle = contentParts[0].replace(/^# /, '');
-        extractedContent = contentParts.slice(1).join('\n\n');
+    if (isManualChunk) {
+      // Extrair metadados do chunk manual
+      const lines = resource.content.split('\n');
+      let extractedTitle = '';
+      let extractedLaw = '';
+      let extractedHierarchy = '';
+      let extractedContext = '';
+      let extractedCategory = '';
+      let extractedTags = '';
+      let extractedContent = '';
+
+      let contentStartIndex = 0;
+
+      // Extrair título
+      if (lines[0]?.startsWith('# ')) {
+        extractedTitle = lines[0].replace('# ', '');
+        contentStartIndex = 2; // Pular título e linha vazia
       }
-    }
 
-    setTitle(extractedTitle);
-    setContent(extractedContent);
-    setEditingResource(resource);
-    setActiveTab('text'); // Mudar para a aba de texto
+      // Extrair outros metadados
+      const contentLines = [];
+      let foundContent = false;
+
+      for (let i = contentStartIndex; i < lines.length; i++) {
+        const line = lines[i];
+
+        if (line.startsWith('**Lei:**')) {
+          extractedLaw = line.replace('**Lei:**', '').trim();
+        } else if (line.startsWith('**Hierarquia:**')) {
+          extractedHierarchy = line.replace('**Hierarquia:**', '').trim();
+        } else if (line.startsWith('**Contexto:**')) {
+          extractedContext = line.replace('**Contexto:**', '').trim();
+        } else if (line.startsWith('**Categoria:**')) {
+          extractedCategory = line.replace('**Categoria:**', '').trim();
+        } else if (line.startsWith('**Tags:**')) {
+          extractedTags = line.replace('**Tags:**', '').trim();
+        } else {
+          // Se não é um metadado, é conteúdo principal
+          // Mas só adiciona se não for uma linha vazia no início
+          if (line.trim() || foundContent) {
+            contentLines.push(line);
+            if (line.trim()) foundContent = true;
+          }
+        }
+      }
+
+      // Remover linhas vazias do final do conteúdo
+      while (
+        contentLines.length > 0 &&
+        !contentLines[contentLines.length - 1].trim()
+      ) {
+        contentLines.pop();
+      }
+
+      extractedContent = contentLines.join('\n');
+
+      // Carregar nos campos do chunk manual
+      setManualTitle(extractedTitle);
+      setManualLaw(extractedLaw);
+      setManualHierarchy(extractedHierarchy);
+      setManualContext(extractedContext);
+      setManualCategory(extractedCategory);
+      setManualTags(extractedTags);
+      setManualChunk(extractedContent);
+      setEditingResource(resource);
+      setActiveTab('manual');
+    } else {
+      // Para chunks antigos (texto simples), extrair título e conteúdo
+      let extractedTitle = '';
+      let extractedContent = resource.content;
+
+      if (resource.content.startsWith('# ')) {
+        const contentParts = resource.content.split('\n\n');
+        if (contentParts.length > 1) {
+          extractedTitle = contentParts[0].replace(/^# /, '');
+          extractedContent = contentParts.slice(1).join('\n\n');
+        }
+      }
+
+      // Carregar como chunk manual para edição
+      setManualTitle(extractedTitle);
+      setManualLaw('');
+      setManualHierarchy('');
+      setManualContext('');
+      setManualCategory('');
+      setManualTags('');
+      setManualChunk(extractedContent);
+      setEditingResource(resource);
+      setActiveTab('manual');
+    }
 
     // Rolar para o topo da página para mostrar o formulário
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim()) {
-      toast.error('O conteúdo não pode estar vazio');
+    if (!manualChunk.trim()) {
+      toast.error('O conteúdo do chunk não pode estar vazio');
       return;
     }
 
-    if (tokenCount > MAX_TOKEN_LIMIT) {
-      toast.error(`O conteúdo excede o limite de ${MAX_TOKEN_LIMIT} tokens`);
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Adiciona título se existir
-      const fullContent = title.trim() ? `# ${title}\n\n${content}` : content;
-
-      if (editingResource) {
-        // Lógica para atualizar recurso existente
-        const result = await updateResource({
-          id: editingResource.id,
-          content: fullContent,
-        });
-
-        if (typeof result === 'string' && result.includes('success')) {
-          toast.success('Conteúdo atualizado com sucesso');
-          setContent('');
-          setTitle('');
-          setTokenCount(0);
-          setEditingResource(null);
-          loadResourcesByType();
-        } else {
-          toast.error('Erro ao atualizar conteúdo');
-        }
-      } else {
-        // Lógica existente para criar novo recurso
-        // Gerar um ID único para o conteúdo de texto, assim como é feito para PDFs
-        const textId = nanoid();
-
-        const result = await createResource({
-          content: fullContent,
-          sourceType: SourceType.TEXT,
-          sourceId: textId,
-        });
-
-        if (typeof result === 'string' && result.includes('successfully')) {
-          toast.success('Conteúdo adicionado com sucesso como um único chunk');
-          setContent('');
-          setTitle('');
-          setTokenCount(0);
-          loadResourcesByType();
-        } else {
-          toast.error('Erro ao adicionar conteúdo');
-        }
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error('Ocorreu um erro ao processar sua solicitação');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handlePdfUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pdfFile) {
-      toast.error('Selecione um arquivo PDF para upload');
-      return;
-    }
-
-    // Verificar tamanho do arquivo (limitar a 10MB)
-    const maxSizeInBytes = 10 * 1024 * 1024; // 10MB
-    if (pdfFile.size > maxSizeInBytes) {
+    if (manualTokenCount > MAX_MANUAL_CHUNK_TOKENS) {
       toast.error(
-        `O arquivo é muito grande. O tamanho máximo permitido é 10MB.`,
+        `O conteúdo excede o limite de ${MAX_MANUAL_CHUNK_TOKENS} tokens`,
       );
       return;
     }
 
-    setIsUploadingPdf(true);
-    const toastId = toast.loading(
-      'Processando PDF, isso pode levar alguns segundos...',
-    );
-
+    setIsSubmittingManual(true);
     try {
-      const formData = new FormData();
-      formData.append('file', pdfFile);
+      if (editingResource) {
+        // Lógica para atualizar recurso existente
+        const result = await updateResource({
+          id: editingResource.id,
+          content: previewManualChunk,
+        });
 
-      // Usar Server Action diretamente em vez de API Route
-      const result = await uploadPdf(formData);
-
-      toast.dismiss(toastId);
-
-      if (result.success) {
-        toast.success(result.message);
-        setPdfFile(null);
-
-        // Limpar o input file
-        const fileInput = document.getElementById(
-          'pdf-file',
-        ) as HTMLInputElement;
-        if (fileInput) fileInput.value = '';
-
-        loadResourcesByType();
+        if (typeof result === 'string' && result.includes('success')) {
+          toast.success('Chunk atualizado com sucesso');
+          // Limpar formulário
+          setManualChunk('');
+          setManualTitle('');
+          setManualLaw('');
+          setManualContext('');
+          setManualTags('');
+          setManualCategory('');
+          setManualHierarchy('');
+          setManualTokenCount(0);
+          setPreviewManualChunk('');
+          setEditingResource(null);
+          loadResourcesByType();
+        } else {
+          toast.error('Erro ao atualizar chunk');
+        }
       } else {
-        toast.error(result.message || 'Erro ao processar o PDF');
+        // Gerar um ID único para o chunk manual
+        const manualId = `manual-${nanoid()}`;
+
+        const result = await createResource({
+          content: previewManualChunk,
+          sourceType: SourceType.TEXT,
+          sourceId: manualId,
+        });
+
+        if (typeof result === 'string' && result.includes('successfully')) {
+          toast.success('Chunk manual adicionado com sucesso');
+          // Limpar apenas o conteúdo do chunk, mantendo os metadados
+          setManualChunk('');
+          setManualTokenCount(0);
+          setPreviewManualChunk('');
+          loadResourcesByType();
+        } else {
+          toast.error('Erro ao adicionar chunk manual');
+        }
       }
     } catch (error) {
-      toast.dismiss(toastId);
-      console.error('Erro no upload do PDF:', error);
-      toast.error('Ocorreu um erro ao fazer upload do PDF');
+      console.error('Erro ao processar chunk manual:', error);
+      toast.error('Erro ao processar chunk manual');
     } finally {
-      setIsUploadingPdf(false);
-    }
-  };
-
-  const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0];
-
-      // Verificar se o arquivo é realmente um PDF antes de definir o estado
-      if (
-        !file.type.includes('pdf') &&
-        !file.name.toLowerCase().endsWith('.pdf')
-      ) {
-        toast.error('O arquivo selecionado não parece ser um PDF válido');
-        // Limpar o input
-        e.target.value = '';
-        return;
-      }
-
-      setPdfFile(file);
-    } else {
-      setPdfFile(null);
+      setIsSubmittingManual(false);
     }
   };
 
@@ -363,19 +410,27 @@ export default function KnowledgeBasePage() {
     }
   };
 
+  // Função para limitar o texto do chunk manual
+  const handleManualChunkChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    const newContent = e.target.value;
+    const count = countTokens(newContent);
+
+    if (count <= MAX_MANUAL_CHUNK_TOKENS) {
+      setManualChunk(newContent);
+    } else {
+      const truncatedContent = truncateToTokenLimit(
+        newContent,
+        MAX_MANUAL_CHUNK_TOKENS,
+      );
+      setManualChunk(truncatedContent);
+      toast.info(`Limite de ${MAX_MANUAL_CHUNK_TOKENS} tokens atingido`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-900 pb-10">
-      <header className="bg-white dark:bg-neutral-800 shadow-sm">
-        <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 flex justify-between items-center">
-          <h1 className="text-xl font-semibold text-neutral-800 dark:text-white">
-            Base de Conhecimento
-          </h1>
-          <Link href="/admin">
-            <Button variant="outline">Voltar</Button>
-          </Link>
-        </div>
-      </header>
-
       <main className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 py-8">
         <div className="bg-white dark:bg-neutral-800 rounded-lg shadow-sm p-6 mb-8">
           <h2 className="text-lg font-medium mb-4 dark:text-white">
@@ -387,24 +442,13 @@ export default function KnowledgeBasePage() {
             <button
               type="button"
               className={`px-4 py-2 font-medium ${
-                activeTab === 'text'
+                activeTab === 'manual'
                   ? 'border-b-2 border-blue-500 text-blue-500'
                   : 'text-neutral-500 dark:text-neutral-400'
               }`}
-              onClick={() => setActiveTab('text')}
+              onClick={() => setActiveTab('manual')}
             >
-              Texto
-            </button>
-            <button
-              type="button"
-              className={`px-4 py-2 font-medium ${
-                activeTab === 'pdf'
-                  ? 'border-b-2 border-blue-500 text-blue-500'
-                  : 'text-neutral-500 dark:text-neutral-400'
-              }`}
-              onClick={() => setActiveTab('pdf')}
-            >
-              Arquivo PDF
+              Chunk Manual
             </button>
             <button
               type="button"
@@ -419,63 +463,168 @@ export default function KnowledgeBasePage() {
             </button>
           </div>
 
-          {activeTab === 'text' ? (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="title"
-                  className="block text-sm font-medium mb-2 dark:text-neutral-200"
-                >
-                  Título (opcional)
-                </label>
-                <Input
-                  id="title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Título do documento, legislação ou contrato"
-                />
-              </div>
-              <div>
-                <label
-                  htmlFor="content"
-                  className="block text-sm font-medium mb-2 dark:text-neutral-200"
-                >
-                  Conteúdo (máximo {MAX_TOKEN_LIMIT} tokens)
-                </label>
-                <Textarea
-                  id="content"
-                  value={content}
-                  onChange={handleContentChange}
-                  rows={10}
-                  placeholder={`Insira texto (máximo ${MAX_TOKEN_LIMIT} tokens). Este será armazenado como um único chunk.`}
-                  required
-                />
-                <div className="flex justify-between items-center mt-2">
-                  <p className="text-xs text-gray-500 dark:text-neutral-400">
-                    Para melhor processamento, insira textos concisos e bem
-                    formatados.
-                  </p>
-                  <p
-                    className={`text-sm ${tokenCount > MAX_TOKEN_LIMIT ? 'text-red-500 font-semibold' : tokenCount > MAX_TOKEN_LIMIT * 0.9 ? 'text-amber-500' : 'text-green-600'}`}
-                  >
-                    {tokenCount} / {MAX_TOKEN_LIMIT} tokens
-                  </p>
+          {activeTab === 'manual' ? (
+            <form onSubmit={handleManualSubmit} className="space-y-6">
+              {/* Layout em duas colunas */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Coluna da esquerda - Metadados */}
+                <div className="space-y-4">
+                  <h3 className="text-md font-medium text-neutral-700 dark:text-neutral-300 border-b pb-2">
+                    Metadados
+                  </h3>
+
+                  <div>
+                    <label
+                      htmlFor="manual-title"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Título
+                    </label>
+                    <Input
+                      id="manual-title"
+                      value={manualTitle}
+                      onChange={(e) => setManualTitle(e.target.value)}
+                      placeholder="Ex: Art. 157 da CLT - Equipamentos de Proteção Individual"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="manual-law"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Lei
+                    </label>
+                    <Input
+                      id="manual-law"
+                      value={manualLaw}
+                      onChange={(e) => setManualLaw(e.target.value)}
+                      placeholder="Ex: CLT, Lei 8.213/91, Código Civil"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="manual-context"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Contexto
+                    </label>
+                    <Textarea
+                      id="manual-context"
+                      value={manualContext}
+                      onChange={(e) => setManualContext(e.target.value)}
+                      rows={4}
+                      placeholder="Ex: Este artigo trata da obrigatoriedade do uso de EPIs no ambiente de trabalho..."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label
+                        htmlFor="manual-category"
+                        className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                      >
+                        Categoria
+                      </label>
+                      <Input
+                        id="manual-category"
+                        value={manualCategory}
+                        onChange={(e) => setManualCategory(e.target.value)}
+                        placeholder="Ex: Segurança do Trabalho"
+                      />
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor="manual-hierarchy"
+                        className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                      >
+                        Hierarquia
+                      </label>
+                      <Input
+                        id="manual-hierarchy"
+                        value={manualHierarchy}
+                        onChange={(e) => setManualHierarchy(e.target.value)}
+                        placeholder="Ex: CLT > Capítulo V > Seção IV"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="manual-tags"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Tags (separadas por vírgula)
+                    </label>
+                    <Input
+                      id="manual-tags"
+                      value={manualTags}
+                      onChange={(e) => setManualTags(e.target.value)}
+                      placeholder="Ex: EPI, segurança, obrigatoriedade, responsabilidade"
+                    />
+                  </div>
+                </div>
+
+                {/* Coluna da direita - Conteúdo */}
+                <div className="space-y-4 flex flex-col h-full">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <h3 className="text-md font-medium text-neutral-700 dark:text-neutral-300">
+                      Conteúdo do Chunk
+                    </h3>
+                    <p
+                      className={`text-sm ${manualTokenCount > MAX_MANUAL_CHUNK_TOKENS ? 'text-red-500 font-semibold' : manualTokenCount > MAX_MANUAL_CHUNK_TOKENS * 0.9 ? 'text-amber-500' : 'text-green-600'}`}
+                    >
+                      {manualTokenCount} / {MAX_MANUAL_CHUNK_TOKENS} tokens
+                    </p>
+                  </div>
+
+                  <div className="flex-1 flex flex-col">
+                    <Textarea
+                      id="manual-chunk"
+                      value={manualChunk}
+                      onChange={handleManualChunkChange}
+                      className="flex-1 resize-none min-h-[350px]"
+                      placeholder={`Ex: Art. 157 - Cabe às empresas:
+
+I - cumprir e fazer cumprir as normas de segurança e medicina do trabalho;
+II - instruir os empregados, através de ordens de serviço, quanto às precauções a tomar no sentido de evitar acidentes do trabalho ou doenças ocupacionais;
+III - adotar as medidas que lhes sejam determinadas pelo órgão regional competente;
+IV - facilitar o exercício da fiscalização pela autoridade competente.
+
+Art. 158 - Cabe aos empregados:
+I - observar as normas de segurança e medicina do trabalho, inclusive as instruções de que trata o item II do artigo anterior;
+II - colaborar com a empresa na aplicação dos dispositivos deste Capítulo.
+
+Parágrafo único - Constitui ato faltoso do empregado a recusa injustificada:
+a) à observância das instruções expedidas pelo empregador na forma do item II do artigo anterior;
+b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
+                      required
+                    />
+                    <p className="text-xs text-gray-500 dark:text-neutral-400 mt-2">
+                      Inclua o conteúdo completo com contexto suficiente para
+                      compreensão autônoma.
+                    </p>
+                  </div>
                 </div>
               </div>
-              <div className="flex space-x-2">
+
+              {/* Botões de ação */}
+              <div className="flex space-x-2 pt-4 border-t">
                 <Button
                   type="submit"
                   disabled={
-                    isSubmitting ||
-                    !content.trim() ||
-                    tokenCount > MAX_TOKEN_LIMIT
+                    isSubmittingManual ||
+                    !manualChunk.trim() ||
+                    manualTokenCount > MAX_MANUAL_CHUNK_TOKENS
                   }
                 >
-                  {isSubmitting
+                  {isSubmittingManual
                     ? 'Processando...'
                     : editingResource
                       ? 'Atualizar Chunk'
-                      : 'Adicionar como Chunk Único'}
+                      : 'Adicionar Chunk Manual'}
                 </Button>
                 {editingResource && (
                   <Button
@@ -483,51 +632,62 @@ export default function KnowledgeBasePage() {
                     variant="outline"
                     onClick={() => {
                       setEditingResource(null);
-                      setContent('');
-                      setTitle('');
-                      setTokenCount(0);
+                      setManualChunk('');
+                      setManualTitle('');
+                      setManualLaw('');
+                      setManualContext('');
+                      setManualTags('');
+                      setManualCategory('');
+                      setManualHierarchy('');
+                      setManualTokenCount(0);
+                      setPreviewManualChunk('');
                     }}
                   >
                     Cancelar Edição
                   </Button>
                 )}
-              </div>
-            </form>
-          ) : activeTab === 'pdf' ? (
-            <form onSubmit={handlePdfUpload} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="pdf-file"
-                  className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setManualChunk('');
+                    setManualTokenCount(0);
+                    setPreviewManualChunk('');
+                  }}
                 >
-                  Arquivo PDF
-                </label>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    id="pdf-file"
-                    type="file"
-                    accept=".pdf,application/pdf"
-                    onChange={handlePdfFileChange}
-                    className="flex-1"
-                    required
-                  />
-                </div>
-                {pdfFile && (
-                  <p className="text-sm text-green-600 mt-2">
-                    Arquivo selecionado: {pdfFile.name} (
-                    {(pdfFile.size / 1024 / 1024).toFixed(2)} MB)
-                  </p>
-                )}
-                <p className="text-xs text-gray-500 mt-1 dark:text-neutral-400">
-                  Upload de arquivos PDF para extração automática de texto.
-                  Tamanho máximo: 10MB.
-                </p>
+                  Limpar Conteúdo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setManualChunk('');
+                    setManualTitle('');
+                    setManualLaw('');
+                    setManualContext('');
+                    setManualTags('');
+                    setManualCategory('');
+                    setManualHierarchy('');
+                    setManualTokenCount(0);
+                    setPreviewManualChunk('');
+                  }}
+                >
+                  Limpar Tudo
+                </Button>
               </div>
-              <Button type="submit" disabled={isUploadingPdf || !pdfFile}>
-                {isUploadingPdf
-                  ? 'Processando...'
-                  : 'Processar PDF e Adicionar'}
-              </Button>
+
+              {/* Preview do chunk final - largura completa */}
+              {previewManualChunk && (
+                <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 bg-neutral-50 dark:bg-neutral-900">
+                  <h4 className="text-sm font-medium mb-2 dark:text-neutral-200">
+                    Preview do Chunk Final ({countTokens(previewManualChunk)}{' '}
+                    tokens)
+                  </h4>
+                  <div className="text-sm text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap max-h-60 overflow-y-auto">
+                    {previewManualChunk}
+                  </div>
+                </div>
+              )}
             </form>
           ) : (
             <form onSubmit={handleLinkSubmit} className="space-y-4">
@@ -685,90 +845,24 @@ export default function KnowledgeBasePage() {
           ) : (
             <>
               {/* Renderizar conteúdos com base na aba ativa */}
-              {activeTab === 'text' && (
+              {activeTab === 'manual' && (
                 <>
                   <h3 className="text-md font-medium mb-3 dark:text-neutral-300">
-                    Chunks de Texto Adicionados Manualmente
+                    Chunks Manuais Adicionados
                   </h3>
-                  {textResources.length === 0 ? (
+                  {manualResources.length === 0 ? (
                     <p className="text-center py-6 text-neutral-500 dark:text-neutral-400">
-                      Nenhum chunk de texto adicionado.
+                      Nenhum chunk manual adicionado.
                     </p>
                   ) : (
                     <div className="space-y-4 mb-8">
-                      {textResources.map((resource) => (
+                      {manualResources.map((resource) => (
                         <ResourceItem
                           key={resource.id}
                           resource={resource}
                           onDelete={handleDelete}
                           onEdit={handleEditResource}
                         />
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {activeTab === 'pdf' && (
-                <>
-                  <h3 className="text-md font-medium mb-3 dark:text-neutral-300">
-                    Conteúdos Extraídos de PDFs
-                  </h3>
-                  {pdfResources.length === 0 ? (
-                    <p className="text-center py-6 text-neutral-500 dark:text-neutral-400">
-                      Nenhum conteúdo de PDF adicionado.
-                    </p>
-                  ) : (
-                    <div className="space-y-4 mb-8">
-                      {pdfResources.map((resource) => (
-                        <div
-                          key={resource.id}
-                          className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4"
-                        >
-                          <div className="flex justify-between">
-                            <div className="flex-1">
-                              {/* Extrair o título do conteúdo (primeira linha com #) */}
-                              <h4 className="font-medium text-base mb-1">
-                                {resource.content
-                                  .split('\n')[0]
-                                  .replace(/^#\s+/, '')}
-                              </h4>
-
-                              {/* Mostrar metadados do PDF */}
-                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">
-                                {resource.content
-                                  .split('\n')
-                                  .slice(2, 5)
-                                  .map((line, idx) => (
-                                    <div key={`${resource.id}-meta-${idx}`}>
-                                      {line}
-                                    </div>
-                                  ))}
-                              </div>
-
-                              <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-2">
-                                Adicionado em:{' '}
-                                {new Date(
-                                  resource.createdAt,
-                                ).toLocaleDateString('pt-BR', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}
-                              </p>
-                            </div>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleDelete(resource.id)}
-                              className="ml-4 self-start"
-                            >
-                              Excluir
-                            </Button>
-                          </div>
-                        </div>
                       ))}
                     </div>
                   )}
@@ -791,7 +885,6 @@ export default function KnowledgeBasePage() {
                           key={resource.id}
                           resource={resource}
                           onDelete={handleDelete}
-                          hideDelete={true}
                           onEdit={handleEditResource}
                         />
                       ))}
@@ -812,26 +905,169 @@ const ResourceItem = ({
   resource,
   onDelete,
   onEdit,
-  hideDelete = false,
 }: {
   resource: Resource;
   onDelete: (id: string) => void;
   onEdit?: (resource: Resource) => void;
-  hideDelete?: boolean;
 }) => {
   // Calculando tokens do conteúdo do recurso
   const resourceTokens = countTokens(resource.content);
+
+  // Verificar se é um chunk manual
+  const isManualChunk = resource.sourceId?.startsWith('manual-');
+
+  // Extrair metadados do chunk manual
+  const extractManualMetadata = (content: string) => {
+    const lines = content.split('\n');
+    const metadata: { [key: string]: string } = {};
+    let contentStart = 0;
+
+    // Extrair título
+    if (lines[0]?.startsWith('# ')) {
+      metadata.title = lines[0].replace('# ', '');
+      contentStart = 2; // Pular título e linha vazia
+    }
+
+    // Extrair outros metadados
+    const contentLines = [];
+    let foundContent = false;
+
+    for (let i = contentStart; i < lines.length; i++) {
+      const line = lines[i];
+
+      if (line.startsWith('**Lei:**')) {
+        metadata.law = line.replace('**Lei:**', '').trim();
+      } else if (line.startsWith('**Hierarquia:**')) {
+        metadata.hierarchy = line.replace('**Hierarquia:**', '').trim();
+      } else if (line.startsWith('**Contexto:**')) {
+        metadata.context = line.replace('**Contexto:**', '').trim();
+      } else if (line.startsWith('**Categoria:**')) {
+        metadata.category = line.replace('**Categoria:**', '').trim();
+      } else if (line.startsWith('**Tags:**')) {
+        metadata.tags = line.replace('**Tags:**', '').trim();
+      } else {
+        // Se não é um metadado, é conteúdo principal
+        // Mas só adiciona se não for uma linha vazia no início
+        if (line.trim() || foundContent) {
+          contentLines.push(line);
+          if (line.trim()) foundContent = true;
+        }
+      }
+    }
+
+    // Remover linhas vazias do final do conteúdo
+    while (
+      contentLines.length > 0 &&
+      !contentLines[contentLines.length - 1].trim()
+    ) {
+      contentLines.pop();
+    }
+
+    metadata.content = contentLines.join('\n');
+
+    return metadata;
+  };
+
+  const manualMetadata = isManualChunk
+    ? extractManualMetadata(resource.content)
+    : null;
 
   return (
     <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
       <div className="flex justify-between">
         <div className="flex-1">
-          <p className="text-sm dark:text-neutral-300">
-            {resource.content.length > 200
-              ? `${resource.content.substring(0, 200)}...`
-              : resource.content}
-          </p>
-          <div className="flex justify-between items-center mt-2">
+          {isManualChunk && manualMetadata ? (
+            // Layout especial para chunks manuais
+            <div className="space-y-2">
+              <h4 className="font-semibold text-base dark:text-white">
+                {manualMetadata.title || 'Chunk Manual'}
+              </h4>
+
+              {manualMetadata.law && (
+                <div className="text-xs">
+                  <span className="font-medium text-blue-600 dark:text-blue-400">
+                    Lei:
+                  </span>
+                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
+                    {manualMetadata.law}
+                  </span>
+                </div>
+              )}
+
+              {manualMetadata.hierarchy && (
+                <div className="text-xs">
+                  <span className="font-medium text-blue-600 dark:text-blue-400">
+                    Hierarquia:
+                  </span>
+                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
+                    {manualMetadata.hierarchy}
+                  </span>
+                </div>
+              )}
+
+              {manualMetadata.context && (
+                <div className="text-xs">
+                  <span className="font-medium text-green-600 dark:text-green-400">
+                    Contexto:
+                  </span>
+                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
+                    {manualMetadata.context}
+                  </span>
+                </div>
+              )}
+
+              <p className="text-sm dark:text-neutral-300 mt-2">
+                {manualMetadata.content && manualMetadata.content.length > 150
+                  ? `${manualMetadata.content.substring(0, 150)}...`
+                  : manualMetadata.content}
+              </p>
+
+              <div className="flex flex-wrap gap-2 mt-2">
+                {manualMetadata.category && (
+                  <span className="inline-block bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs px-2 py-1 rounded">
+                    {manualMetadata.category}
+                  </span>
+                )}
+                {manualMetadata.tags?.split(',').map((tag, idx) => (
+                  <span
+                    key={`tag-${resource.id}-${tag.trim()}`}
+                    className="inline-block bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs px-2 py-1 rounded"
+                  >
+                    {tag.trim()}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : resource.sourceType === 'LINK' ? (
+            // Layout para Links
+            <div className="space-y-2">
+              <h4 className="font-medium text-base mb-1 dark:text-white">
+                {resource.content.split('\n')[0].replace(/^#\s+/, '') ||
+                  'Conteúdo de Link'}
+              </h4>
+
+              <p className="text-sm dark:text-neutral-300">
+                {resource.content.length > 200
+                  ? `${resource.content.substring(0, 200)}...`
+                  : resource.content}
+              </p>
+
+              <span className="inline-block bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs px-2 py-1 rounded">
+                Link
+              </span>
+            </div>
+          ) : (
+            // Layout padrão para outros tipos de recursos
+            <div className="space-y-2">
+              <p className="text-sm dark:text-neutral-300">
+                {resource.content.length > 200
+                  ? `${resource.content.substring(0, 200)}...`
+                  : resource.content}
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center mt-3">
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               Adicionado em:{' '}
               {new Date(resource.createdAt).toLocaleDateString('pt-BR', {
@@ -842,11 +1078,18 @@ const ResourceItem = ({
                 minute: '2-digit',
               })}
             </p>
-            <p className="text-xs text-blue-500">{resourceTokens} tokens</p>
+            <div className="flex items-center space-x-2">
+              {isManualChunk && (
+                <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
+                  Manual
+                </span>
+              )}
+              <p className="text-xs text-blue-500">{resourceTokens} tokens</p>
+            </div>
           </div>
         </div>
         <div className="flex flex-col space-y-2">
-          {resource.sourceType === SourceType.TEXT && onEdit && (
+          {onEdit && (
             <Button
               variant="outline"
               size="sm"
@@ -856,16 +1099,14 @@ const ResourceItem = ({
               Editar
             </Button>
           )}
-          {!hideDelete && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => onDelete(resource.id)}
-              className="ml-4 self-start"
-            >
-              Excluir
-            </Button>
-          )}
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onDelete(resource.id)}
+            className="ml-4 self-start"
+          >
+            Excluir
+          </Button>
         </div>
       </div>
     </div>
