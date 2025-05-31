@@ -130,32 +130,6 @@ export const generateLegalChunks = (text: string): string[] => {
   let currentChunk = '';
   let currentTokenCount = 0;
 
-  // Extrair título da lei dos metadados do documento
-  let documentTitle = '';
-
-  if (articles.length > 0 && articles[0].start > 0) {
-    const metaText = text.substring(0, articles[0].start).trim();
-
-    // Extrair título da lei (primeira linha significativa)
-    const lines = metaText.split('\n').filter((line) => line.trim().length > 0);
-    if (lines.length > 0) {
-      // Procurar por padrões de título de lei
-      for (const line of lines) {
-        if (
-          line.match(/(?:DECRETO|LEI|CÓDIGO|CONSTITUIÇÃO|RESOLUÇÃO|PORTARIA)/i)
-        ) {
-          documentTitle = line.trim();
-          break;
-        }
-      }
-
-      // Se não encontrou padrão específico, usar a primeira linha não-vazia
-      if (!documentTitle && lines[0]) {
-        documentTitle = lines[0].trim();
-      }
-    }
-  }
-
   // Processar cada artigo
   for (let i = 0; i < articles.length; i++) {
     const article = articles[i];
@@ -164,16 +138,12 @@ export const generateLegalChunks = (text: string): string[] => {
     const cleanArticleText = removeTrailingStructuralElements(article.content);
     const articleTokens = countTokens(cleanArticleText);
 
-    // Adicionar título da lei como metadado no final de cada chunk
-    const lawMetadata = documentTitle ? `\n\n[Fonte: ${documentTitle}]` : '';
-    const metadataTokens = countTokens(lawMetadata);
-
-    // Caso 1: Artigo cabe completamente dentro do limite (considerando metadados)
-    if (articleTokens + metadataTokens <= MAX_TOKEN_SIZE) {
+    // Caso 1: Artigo cabe completamente dentro do limite
+    if (articleTokens <= MAX_TOKEN_SIZE) {
       // Verificar se podemos agrupar com o chunk atual
       if (
         currentTokenCount > 0 &&
-        currentTokenCount + articleTokens + metadataTokens <= MAX_TOKEN_SIZE
+        currentTokenCount + articleTokens <= MAX_TOKEN_SIZE
       ) {
         // Agrupar com o chunk atual
         currentChunk += `\n\n${cleanArticleText}`;
@@ -181,24 +151,21 @@ export const generateLegalChunks = (text: string): string[] => {
       } else {
         // Finalizar chunk atual se existir e atender ao mínimo
         if (currentChunk && currentTokenCount >= MIN_TOKEN_SIZE) {
-          const finalChunk = currentChunk + lawMetadata;
-          chunks.push(finalChunk);
+          chunks.push(currentChunk);
         } else if (currentChunk && currentTokenCount > 0) {
           // Se não atingiu o mínimo, tentar agrupar com o próximo artigo
           const combinedContent = `${currentChunk}\n\n${cleanArticleText}`;
-          const combinedTokens = countTokens(combinedContent) + metadataTokens;
+          const combinedTokens = countTokens(combinedContent);
 
           if (combinedTokens <= MAX_TOKEN_SIZE) {
             // Se couber, agrupamos e finalizamos
-            const finalChunk = combinedContent + lawMetadata;
-            chunks.push(finalChunk);
+            chunks.push(combinedContent);
             currentChunk = '';
             currentTokenCount = 0;
             continue;
           } else {
             // Se não couber, salvamos o chunk atual mesmo sendo menor
-            const finalChunk = currentChunk + lawMetadata;
-            chunks.push(finalChunk);
+            chunks.push(currentChunk);
           }
         }
 
@@ -211,14 +178,13 @@ export const generateLegalChunks = (text: string): string[] => {
     else {
       // Finalizar chunk atual se existir
       if (currentChunk) {
-        const finalChunk = currentChunk + lawMetadata;
-        chunks.push(finalChunk);
+        chunks.push(currentChunk);
         currentChunk = '';
         currentTokenCount = 0;
       }
 
       // Dividir o artigo grande em partes menores
-      const articleParts = splitLargeArticle(cleanArticleText, documentTitle);
+      const articleParts = splitLargeArticle(cleanArticleText);
 
       // Adicionar as partes do artigo dividido
       chunks.push(...articleParts);
@@ -227,9 +193,7 @@ export const generateLegalChunks = (text: string): string[] => {
 
   // Adicionar o último chunk se ainda houver algo pendente
   if (currentChunk) {
-    const lawMetadata = documentTitle ? `\n\n[Fonte: ${documentTitle}]` : '';
-    const finalChunk = currentChunk + lawMetadata;
-    chunks.push(finalChunk);
+    chunks.push(currentChunk);
   }
 
   // Validar que todos os chunks estão dentro dos limites
@@ -249,10 +213,7 @@ export const generateLegalChunks = (text: string): string[] => {
 };
 
 // Função para dividir artigos muito grandes em chunks menores
-export const splitLargeArticle = (
-  articleText: string,
-  documentTitle: string,
-): string[] => {
+export const splitLargeArticle = (articleText: string): string[] => {
   const chunks: string[] = [];
 
   // Dividir por parágrafos primeiro
@@ -265,16 +226,12 @@ export const splitLargeArticle = (
     const sentences = articleText
       .split(/(?<=[.!?])\s+/)
       .filter((s) => s.trim().length > 0);
-    return splitBySentences(sentences, documentTitle);
+    return splitBySentences(sentences);
   }
 
   // Extrair o cabeçalho do artigo (primeira linha)
   const articleHeader = paragraphs[0];
   let currentChunk = articleHeader;
-
-  // Metadados da lei para incluir em cada chunk
-  const lawMetadata = documentTitle ? `\n\n[Fonte: ${documentTitle}]` : '';
-  const metadataTokens = countTokens(lawMetadata);
 
   let currentTokenCount = countTokens(currentChunk);
 
@@ -283,10 +240,10 @@ export const splitLargeArticle = (
     const paragraph = paragraphs[i];
     const paragraphTokens = countTokens(paragraph);
 
-    // Verificar se adicionar este parágrafo excederá o limite (considerando metadados)
-    if (currentTokenCount + paragraphTokens + metadataTokens > MAX_TOKEN_SIZE) {
+    // Verificar se adicionar este parágrafo excederá o limite
+    if (currentTokenCount + paragraphTokens > MAX_TOKEN_SIZE) {
       // Finalizar chunk atual
-      const finalChunk = currentChunk + lawMetadata;
+      const finalChunk = currentChunk;
       chunks.push(finalChunk);
 
       // Novo chunk com referência ao artigo
@@ -302,7 +259,7 @@ export const splitLargeArticle = (
 
   // Adicionar o último chunk se ainda houver algo
   if (currentChunk) {
-    const finalChunk = currentChunk + lawMetadata;
+    const finalChunk = currentChunk;
     chunks.push(finalChunk);
   }
 
@@ -310,23 +267,17 @@ export const splitLargeArticle = (
 };
 
 // Função auxiliar para dividir por sentenças
-const splitBySentences = (
-  sentences: string[],
-  documentTitle: string,
-): string[] => {
+const splitBySentences = (sentences: string[]): string[] => {
   const chunks: string[] = [];
   let currentChunk = '';
-
-  const lawMetadata = documentTitle ? `\n\n[Fonte: ${documentTitle}]` : '';
-  const metadataTokens = countTokens(lawMetadata);
 
   for (const sentence of sentences) {
     const sentenceTokens = countTokens(sentence);
     const currentTokens = countTokens(currentChunk);
 
-    if (currentTokens + sentenceTokens + metadataTokens > MAX_TOKEN_SIZE) {
+    if (currentTokens + sentenceTokens > MAX_TOKEN_SIZE) {
       if (currentChunk.trim()) {
-        chunks.push(currentChunk + lawMetadata);
+        chunks.push(currentChunk.trim());
       }
       currentChunk = sentence;
     } else {
@@ -335,7 +286,7 @@ const splitBySentences = (
   }
 
   if (currentChunk.trim()) {
-    chunks.push(currentChunk + lawMetadata);
+    chunks.push(currentChunk.trim());
   }
 
   return chunks;
@@ -410,7 +361,7 @@ const generateStandardChunks = (input: string): string[] => {
   }
 
   // Adicionar o último chunk se houver algo
-  if (currentChunk.trim().length > 0) {
+  if (currentChunk?.trim()) {
     chunks.push(currentChunk.trim());
   }
 
@@ -431,15 +382,19 @@ const generateStandardChunks = (input: string): string[] => {
 };
 
 // Função principal para dividir texto em pedaços menores
-const generateChunks = (input: string, sourceType?: string): string[] => {
+const generateChunks = (
+  input: string,
+  sourceType?: string,
+  linkMetadata?: { lei?: string; contexto?: string },
+): string[] => {
   // Se for conteúdo de fonte de texto manual (da aba de texto na interface), retornar como um único chunk
   if (sourceType === SourceType.TEXT) {
     return [input];
   }
 
-  // Para links, verificar se é conteúdo jurídico
-  if (sourceType === SourceType.LINK && isLegalContent(input)) {
-    return generateLegalChunks(input);
+  // Para links, usar a função especializada com overlap e metadados
+  if (sourceType === SourceType.LINK) {
+    return generateLinkChunks(input, linkMetadata);
   }
 
   // Para outros tipos, usar a abordagem padrão
@@ -449,16 +404,23 @@ const generateChunks = (input: string, sourceType?: string): string[] => {
 export const generateEmbeddings = async (
   value: string,
   sourceType?: string,
+  linkMetadata?: { lei?: string; contexto?: string },
 ): Promise<Array<{ embedding: number[]; content: string }>> => {
-  const chunks = generateChunks(value, sourceType);
+  const chunks = generateChunks(value, sourceType, linkMetadata);
   console.log(`Total de chunks gerados: ${chunks.length}`);
 
   // Validar e filtrar chunks que excedem o limite
+  // Para chunks de links com metadados, permitir tamanho maior
+  const isLinkWithMetadata =
+    sourceType === SourceType.LINK &&
+    (linkMetadata?.lei || linkMetadata?.contexto);
+  const tokenLimit = isLinkWithMetadata ? MAX_TOKEN_SIZE + 500 : MAX_TOKEN_SIZE; // Permite 500 tokens extras para metadados de links
+
   const validChunks = chunks.filter((chunk) => {
     const tokenCount = countTokens(chunk);
-    if (tokenCount > MAX_TOKEN_SIZE) {
+    if (tokenCount > tokenLimit) {
       console.warn(
-        `Chunk rejeitado por exceder limite: ${tokenCount} tokens > ${MAX_TOKEN_SIZE}`,
+        `Chunk rejeitado por exceder limite: ${tokenCount} tokens > ${tokenLimit} (limite ${isLinkWithMetadata ? 'flexível para links com metadados' : 'padrão'})`,
       );
       console.warn(`Conteúdo do chunk: ${chunk.substring(0, 200)}...`);
       return false;
@@ -466,7 +428,9 @@ export const generateEmbeddings = async (
     return true;
   });
 
-  console.log(`Chunks válidos após filtragem: ${validChunks.length}`);
+  console.log(
+    `Chunks válidos após filtragem: ${validChunks.length} (limite aplicado: ${tokenLimit} tokens)`,
+  );
 
   // Processando chunks em lotes para evitar exceder limites
   const results: Array<{ embedding: number[]; content: string }> = [];
@@ -640,4 +604,267 @@ export const findRelevantContent = async (userQuery: string) => {
     console.error((error as Error)?.stack || 'Sem stack trace disponível');
     return [];
   }
+};
+
+// Função específica para chunking de conteúdo de links com overlap e metadados
+export const generateLinkChunks = (
+  text: string,
+  linkMetadata?: { lei?: string; contexto?: string },
+): string[] => {
+  const TARGET_CONTENT_TOKENS = 500; // Conteúdo fixo de 500 tokens
+  const TARGET_OVERLAP_TOKENS = 120; // Overlap fixo de 120 tokens
+
+  // Calcular tokens dos metadados (sem limitação)
+  const metadataText =
+    linkMetadata?.lei || linkMetadata?.contexto
+      ? `\n\n--- Metadados ---${linkMetadata.lei ? `\n**Lei:** ${linkMetadata.lei}` : ''}${linkMetadata.contexto ? `\n**Contexto:** ${linkMetadata.contexto}` : ''}`
+      : '';
+  const metadataTokens = countTokens(metadataText);
+
+  console.log(
+    `Estratégia flexível: conteúdo=${TARGET_CONTENT_TOKENS}, overlap=${TARGET_OVERLAP_TOKENS}, metadados=${metadataTokens} tokens (sem limite)`,
+  );
+
+  // Limpar e preparar texto como conteúdo corrido
+  const cleanText = text.trim().replace(/\s+/g, ' ');
+
+  // Gerar chunks com estratégia simples e uniforme
+  const baseChunks = generateSimpleChunks(cleanText, TARGET_CONTENT_TOKENS);
+
+  if (baseChunks.length <= 1) {
+    return baseChunks.map((chunk) => addLinkMetadata(chunk, linkMetadata));
+  }
+
+  // Aplicar overlap fixo entre chunks
+  const chunksWithOverlap: string[] = [];
+
+  for (let i = 0; i < baseChunks.length; i++) {
+    const chunkContent = baseChunks[i];
+    let overlapText = '';
+
+    // Overlap fixo de 120 tokens do chunk anterior
+    if (i > 0) {
+      const previousChunk = baseChunks[i - 1];
+      overlapText = generateFixedOverlap(previousChunk, TARGET_OVERLAP_TOKENS);
+    }
+
+    // Montar chunk final: overlap + conteúdo + metadados
+    let finalChunk = '';
+    if (overlapText) {
+      finalChunk = `...${overlapText}\n\n${chunkContent}`;
+    } else {
+      finalChunk = chunkContent;
+    }
+
+    // Adicionar metadados (sem limitação de tamanho)
+    finalChunk = addLinkMetadata(finalChunk, linkMetadata);
+
+    // Log informativo
+    const contentTokens = countTokens(chunkContent);
+    const overlapTokens = overlapText ? countTokens(overlapText) : 0;
+    const finalTokenCount = countTokens(finalChunk);
+
+    console.log(
+      `Chunk ${i + 1}: conteúdo=${contentTokens}, overlap=${overlapTokens}, metadados=${metadataTokens}, total=${finalTokenCount} tokens`,
+    );
+
+    chunksWithOverlap.push(finalChunk);
+  }
+
+  console.log(
+    `Gerados ${chunksWithOverlap.length} chunks com metadados flexíveis (500+120+metadados-ilimitados)`,
+  );
+  return chunksWithOverlap;
+};
+
+// Nova função simplificada para gerar chunks de 500 tokens
+const generateSimpleChunks = (text: string, targetTokens: number): string[] => {
+  const chunks: string[] = [];
+  const words = text.split(' ');
+  let currentChunk = '';
+  let currentTokens = 0;
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const testChunk = currentChunk ? `${currentChunk} ${word}` : word;
+    const testTokens = countTokens(testChunk);
+
+    // Se ainda não atingiu o target, continuar adicionando
+    if (testTokens < targetTokens) {
+      currentChunk = testChunk;
+      currentTokens = testTokens;
+    }
+    // Se atingiu o target, procurar melhor ponto de quebra
+    else {
+      const breakPoint = findBestBreakPoint(
+        currentChunk,
+        words,
+        i,
+        targetTokens,
+      );
+
+      if (breakPoint.chunk) {
+        chunks.push(breakPoint.chunk);
+        // Recomeçar do ponto de quebra
+        i = breakPoint.nextIndex - 1; // -1 porque o loop vai incrementar
+        currentChunk = '';
+        currentTokens = 0;
+      } else {
+        // Se não encontrou bom ponto de quebra, usar o chunk atual
+        chunks.push(currentChunk);
+        currentChunk = word;
+        currentTokens = countTokens(word);
+      }
+    }
+  }
+
+  // Adicionar último chunk se sobrou algo
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+
+  return chunks.filter((chunk) => chunk.trim().length > 0);
+};
+
+// Função para encontrar o melhor ponto de quebra próximo ao target
+const findBestBreakPoint = (
+  currentChunk: string,
+  allWords: string[],
+  currentIndex: number,
+  targetTokens: number,
+):
+  | { chunk: string; nextIndex: number }
+  | { chunk: null; nextIndex: number } => {
+  // Buscar em uma janela de ±20 palavras do ponto atual
+  const searchWindow = 20;
+  const startSearch = Math.max(0, currentIndex - searchWindow);
+  const endSearch = Math.min(allWords.length, currentIndex + searchWindow);
+
+  // Padrões de quebra em ordem de preferência
+  const breakPatterns = [
+    /\.\s*$/, // Final de sentença (.)
+    /\!\s*$/, // Final de exclamação (!)
+    /\?\s*$/, // Final de pergunta (?)
+    /\;\s*$/, // Ponto e vírgula (;)
+    /\:\s*$/, // Dois pontos (:)
+    /\,\s*$/, // Vírgula (último recurso)
+  ];
+
+  let bestBreak: { chunk: string; nextIndex: number; score: number } | null =
+    null;
+
+  // Procurar por cada padrão na janela
+  for (let wordIndex = startSearch; wordIndex < endSearch; wordIndex++) {
+    const testChunk = allWords.slice(0, wordIndex + 1).join(' ');
+    const testTokens = countTokens(testChunk);
+
+    // Só considerar se estiver próximo do target (±50 tokens)
+    if (Math.abs(testTokens - targetTokens) > 50) continue;
+
+    const lastWord = allWords[wordIndex];
+
+    for (
+      let patternIndex = 0;
+      patternIndex < breakPatterns.length;
+      patternIndex++
+    ) {
+      const pattern = breakPatterns[patternIndex];
+
+      if (pattern.test(lastWord)) {
+        // Calcular score: proximidade do target + prioridade do padrão
+        const proximityScore = 50 - Math.abs(testTokens - targetTokens); // Max 50
+        const patternScore = (breakPatterns.length - patternIndex) * 10; // Max 60
+        const totalScore = proximityScore + patternScore;
+
+        if (!bestBreak || totalScore > bestBreak.score) {
+          bestBreak = {
+            chunk: testChunk,
+            nextIndex: wordIndex + 1,
+            score: totalScore,
+          };
+        }
+        break; // Para de testar outros padrões para esta palavra
+      }
+    }
+  }
+
+  // Se encontrou um bom ponto de quebra, usar
+  if (bestBreak) {
+    return { chunk: bestBreak.chunk, nextIndex: bestBreak.nextIndex };
+  }
+
+  // Se não encontrou, retornar null para usar quebra simples
+  return { chunk: null, nextIndex: currentIndex };
+};
+
+// Função para gerar overlap fixo de exatamente ~120 tokens
+const generateFixedOverlap = (
+  previousChunk: string,
+  targetTokens: number,
+): string => {
+  const words = previousChunk.split(' ');
+
+  // Estimativa inicial (aproximadamente 1.3 tokens por palavra)
+  const estimatedWords = Math.floor(targetTokens / 1.3);
+
+  // Ajuste fino para ficar próximo dos 120 tokens
+  let bestOverlap = '';
+  let bestTokenCount = 0;
+
+  // Testar ±10 palavras da estimativa
+  for (
+    let wordCount = Math.max(10, estimatedWords - 10);
+    wordCount <= Math.min(words.length, estimatedWords + 10);
+    wordCount++
+  ) {
+    const candidate = words.slice(-wordCount).join(' ');
+    const candidateTokens = countTokens(candidate);
+
+    // Prefere o mais próximo do target
+    if (
+      Math.abs(candidateTokens - targetTokens) <
+      Math.abs(bestTokenCount - targetTokens)
+    ) {
+      bestOverlap = candidate;
+      bestTokenCount = candidateTokens;
+    }
+
+    // Se passou muito do target, parar
+    if (candidateTokens > targetTokens + 10) {
+      break;
+    }
+  }
+
+  return bestOverlap;
+};
+
+// Função auxiliar para adicionar metadados de lei e contexto
+const addLinkMetadata = (
+  content: string,
+  metadata?: { lei?: string; contexto?: string },
+): string => {
+  let enrichedContent = content;
+
+  if (metadata?.lei || metadata?.contexto) {
+    enrichedContent += '\n\n--- Metadados ---';
+
+    if (metadata.lei) {
+      enrichedContent += `\n**Lei:** ${metadata.lei}`;
+    }
+
+    if (metadata.contexto) {
+      enrichedContent += `\n**Contexto:** ${metadata.contexto}`;
+    }
+  }
+
+  return enrichedContent;
+};
+
+// Nova função para gerar chunks base menores que acomodem overlap + metadados
+const generateSmallerChunksForLinks = (
+  text: string,
+  maxTokensPerChunk: number,
+): string[] => {
+  // Agora usa a estratégia simplificada - esta função não é mais necessária
+  return generateSimpleChunks(text, maxTokensPerChunk);
 };

@@ -19,7 +19,8 @@ import { embeddings as embeddingsTable } from '@/lib/db/schema/embeddings';
 export const createLink = async (input: NewLinkParams) => {
   try {
     console.log('Iniciando criação do link:', input.url);
-    const { url, title, description } = insertLinkSchema.parse(input);
+    const { url, title, description, lei, contexto } =
+      insertLinkSchema.parse(input);
 
     // Verifica se o link já existe
     const existingLink = await db
@@ -36,14 +37,17 @@ export const createLink = async (input: NewLinkParams) => {
     console.log('Inserindo novo link no banco de dados...');
     const [link] = await db
       .insert(links)
-      .values({ url, title, description })
+      .values({ url, title, description }) // Não salvamos lei e contexto
       .returning();
 
     console.log('Link inserido com sucesso:', link);
 
-    // Processa o conteúdo da URL imediatamente
+    // Processa o conteúdo da URL imediatamente, passando os metadados temporários
     console.log('Processando conteúdo do link...');
-    const processingResult = await processLinkContent(link.id);
+    const processingResult = await processLinkContent(link.id, {
+      lei,
+      contexto,
+    });
     //console.log('Resultado do processamento:', processingResult);
 
     return 'Link adicionado com sucesso e conteúdo processado.';
@@ -102,7 +106,8 @@ export const refreshLink = async (id: string) => {
       await deleteResourcesBySourceId(id);
     }
 
-    return await processLinkContent(id);
+    // Para refresh, não temos os metadados temporários, então passamos vazios
+    return await processLinkContent(id, {});
   } catch (error) {
     console.error('Erro ao atualizar conteúdo do link:', error);
     if (error instanceof Error) {
@@ -112,7 +117,10 @@ export const refreshLink = async (id: string) => {
   }
 };
 
-async function processLinkContent(linkId: string) {
+async function processLinkContent(
+  linkId: string,
+  metadata: { lei?: string; contexto?: string },
+) {
   try {
     console.log('Processando conteúdo do link ID:', linkId);
 
@@ -321,9 +329,14 @@ async function processLinkContent(linkId: string) {
 
       // Gerar embeddings para o conteúdo completo
       console.log('Gerando embeddings para o conteúdo completo...');
+      const linkMetadata = {
+        lei: metadata.lei || undefined,
+        contexto: metadata.contexto || undefined,
+      };
       const contentEmbeddings = await generateEmbeddings(
         enhancedContent,
         SourceType.LINK,
+        linkMetadata,
       );
       console.log(
         `Gerados ${contentEmbeddings.length} fragmentos de embeddings para o conteúdo completo`,

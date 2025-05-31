@@ -59,6 +59,8 @@ export default function KnowledgeBasePage() {
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const [linkDescription, setLinkDescription] = useState('');
+  const [linkLei, setLinkLei] = useState('');
+  const [linkContexto, setLinkContexto] = useState('');
   const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [isRefreshingLink, setIsRefreshingLink] = useState<string | null>(null);
 
@@ -342,16 +344,28 @@ export default function KnowledgeBasePage() {
 
     setIsSubmittingLink(true);
     try {
-      const result = await createLink({
+      const linkData: any = {
         url: linkUrl,
         title: linkTitle,
         description: linkDescription || null,
-      });
+      };
+
+      // Adicionar lei e contexto apenas se tiverem valores
+      if (linkLei.trim()) {
+        linkData.lei = linkLei;
+      }
+      if (linkContexto.trim()) {
+        linkData.contexto = linkContexto;
+      }
+
+      const result = await createLink(linkData);
 
       toast.success('Link adicionado com sucesso');
       setLinkUrl('');
       setLinkTitle('');
       setLinkDescription('');
+      setLinkLei('');
+      setLinkContexto('');
       loadLinks();
       loadResourcesByType(); // Atualizar os recursos baseado no tipo
     } catch (error) {
@@ -721,6 +735,44 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                   placeholder="Título para identificar este link"
                   required
                 />
+              </div>
+              <div>
+                <label
+                  htmlFor="link-lei"
+                  className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                >
+                  Lei (opcional - sem limite de tamanho)
+                </label>
+                <Textarea
+                  id="link-lei"
+                  value={linkLei}
+                  onChange={(e) => setLinkLei(e.target.value)}
+                  rows={2}
+                  placeholder="Ex: Lei 8.213/91 - Dispõe sobre os Planos de Benefícios da Previdência Social e dá outras providências..."
+                />
+                <p className="text-xs text-gray-500 mt-1 dark:text-neutral-400">
+                  Informações detalhadas sobre a legislação aplicável. Este
+                  campo será incluído em todos os chunks gerados.
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="link-contexto"
+                  className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                >
+                  Contexto (opcional - sem limite de tamanho)
+                </label>
+                <Textarea
+                  id="link-contexto"
+                  value={linkContexto}
+                  onChange={(e) => setLinkContexto(e.target.value)}
+                  rows={3}
+                  placeholder="Descrição detalhada do contexto legal, jurisprudencial ou temático desta fonte. Inclua informações sobre aplicabilidade, âmbito de atuação, relações com outras normas, etc."
+                />
+                <p className="text-xs text-gray-500 mt-1 dark:text-neutral-400">
+                  Contexto detalhado que ajudará a IA a compreender melhor o
+                  conteúdo. Este campo será incluído em todos os chunks gerados.
+                </p>
               </div>
               <div>
                 <label

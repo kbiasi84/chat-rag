@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { text, varchar, timestamp, pgTable } from 'drizzle-orm/pg-core';
 import { createSelectSchema } from 'drizzle-zod';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import { nanoid } from '@/lib/utils';
 
@@ -18,12 +18,18 @@ export const links = pgTable('links', {
 });
 
 // Schema para links - usado para validar requisições de API
-export const insertLinkSchema = createSelectSchema(links).extend({}).omit({
-  id: true,
-  lastProcessed: true,
-  createdAt: true,
-  updatedAt: true,
-});
+// Adicionamos lei e contexto como campos opcionais apenas para entrada, não para salvar no banco
+export const insertLinkSchema = createSelectSchema(links)
+  .extend({
+    lei: z.string().optional(),
+    contexto: z.string().optional(),
+  })
+  .omit({
+    id: true,
+    lastProcessed: true,
+    createdAt: true,
+    updatedAt: true,
+  });
 
 export const linkSchema = createSelectSchema(links);
 
