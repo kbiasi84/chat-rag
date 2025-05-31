@@ -16,6 +16,7 @@ import {
   deleteLink,
   refreshLink,
 } from '@/lib/actions/links';
+import { uploadPdf } from '@/lib/actions/pdf';
 import { toast } from 'sonner';
 import { SourceType } from '@/lib/db/schema/resources';
 import { nanoid } from '@/lib/utils';
@@ -51,7 +52,9 @@ const MAX_MANUAL_CHUNK_TOKENS = 800;
 export default function KnowledgeBasePage() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'manual' | 'link'>('manual');
+  const [activeTab, setActiveTab] = useState<'manual' | 'link' | 'pdf'>(
+    'manual',
+  );
   const [editingResource, setEditingResource] = useState<Resource | null>(null);
 
   // Estados para gerenciamento de links
@@ -79,6 +82,13 @@ export default function KnowledgeBasePage() {
   // Estados de recursos por tipo
   const [linkResources, setLinkResources] = useState<Resource[]>([]);
   const [manualResources, setManualResources] = useState<Resource[]>([]);
+  const [pdfResources, setPdfResources] = useState<Resource[]>([]);
+
+  // Estados para PDF
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfLei, setPdfLei] = useState('');
+  const [pdfContexto, setPdfContexto] = useState('');
+  const [isSubmittingPdf, setIsSubmittingPdf] = useState(false);
 
   useEffect(() => {
     loadResourcesByType();
@@ -149,6 +159,7 @@ export default function KnowledgeBasePage() {
     // Buscar recursos por tipo
     const textData = await getResourcesBySourceType(SourceType.TEXT);
     const linkData = await getResourcesBySourceType(SourceType.LINK);
+    const pdfData = await getResourcesBySourceType(SourceType.PDF);
 
     // Separar recursos manuais (que têm sourceId começando com 'manual-')
     const manualData = textData.filter((resource) =>
@@ -157,6 +168,7 @@ export default function KnowledgeBasePage() {
 
     setLinkResources(linkData);
     setManualResources(manualData);
+    setPdfResources(pdfData);
 
     setIsLoading(false);
   };
@@ -376,6 +388,45 @@ export default function KnowledgeBasePage() {
     }
   };
 
+  const handlePdfSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pdfFile) {
+      toast.error('Selecione um arquivo PDF');
+      return;
+    }
+
+    setIsSubmittingPdf(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', pdfFile);
+
+      // Adicionar metadados apenas se tiverem valores
+      if (pdfLei.trim()) {
+        formData.append('lei', pdfLei);
+      }
+      if (pdfContexto.trim()) {
+        formData.append('contexto', pdfContexto);
+      }
+
+      const result = await uploadPdf(formData);
+
+      if (result.success) {
+        toast.success(result.message);
+        setPdfFile(null);
+        setPdfLei('');
+        setPdfContexto('');
+        loadResourcesByType();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Ocorreu um erro ao processar o PDF');
+    } finally {
+      setIsSubmittingPdf(false);
+    }
+  };
+
   const handleRefreshLink = async (id: string) => {
     setIsRefreshingLink(id);
     try {
@@ -474,6 +525,17 @@ export default function KnowledgeBasePage() {
               onClick={() => setActiveTab('link')}
             >
               Link da Web
+            </button>
+            <button
+              type="button"
+              className={`px-4 py-2 font-medium ${
+                activeTab === 'pdf'
+                  ? 'border-b-2 border-blue-500 text-blue-500'
+                  : 'text-neutral-500 dark:text-neutral-400'
+              }`}
+              onClick={() => setActiveTab('pdf')}
+            >
+              PDF
             </button>
           </div>
 
@@ -703,7 +765,7 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                 </div>
               )}
             </form>
-          ) : (
+          ) : activeTab === 'link' ? (
             <form onSubmit={handleLinkSubmit} className="space-y-4">
               <div>
                 <label
@@ -803,6 +865,96 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                   ? 'Processando...'
                   : 'Adicionar Link e Extrair Conteúdo'}
               </Button>
+            </form>
+          ) : (
+            <form onSubmit={handlePdfSubmit} className="space-y-6">
+              {/* Layout em duas colunas */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Coluna da esquerda - Metadados */}
+                <div className="space-y-4">
+                  <h3 className="text-md font-medium text-neutral-700 dark:text-neutral-300 border-b pb-2">
+                    Metadados
+                  </h3>
+
+                  <div>
+                    <label
+                      htmlFor="pdf-lei"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Lei (opcional - sem limite de tamanho)
+                    </label>
+                    <Textarea
+                      id="pdf-lei"
+                      value={pdfLei}
+                      onChange={(e) => setPdfLei(e.target.value)}
+                      rows={2}
+                      placeholder="Ex: Lei 8.213/91 - Dispõe sobre os Planos de Benefícios da Previdência Social e dá outras providências..."
+                    />
+                    <p className="text-xs text-gray-500 mt-1 dark:text-neutral-400">
+                      Informações detalhadas sobre a legislação aplicável. Este
+                      campo será incluído em todos os chunks gerados.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="pdf-contexto"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Contexto (opcional - sem limite de tamanho)
+                    </label>
+                    <Textarea
+                      id="pdf-contexto"
+                      value={pdfContexto}
+                      onChange={(e) => setPdfContexto(e.target.value)}
+                      rows={3}
+                      placeholder="Descrição detalhada do contexto legal, jurisprudencial ou temático desta fonte. Inclua informações sobre aplicabilidade, âmbito de atuação, relações com outras normas, etc."
+                    />
+                    <p className="text-xs text-gray-500 mt-1 dark:text-neutral-400">
+                      Contexto detalhado que ajudará a IA a compreender melhor o
+                      conteúdo. Este campo será incluído em todos os chunks
+                      gerados.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Coluna da direita - Conteúdo */}
+                <div className="space-y-4 flex flex-col h-full">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <h3 className="text-md font-medium text-neutral-700 dark:text-neutral-300">
+                      Conteúdo do PDF
+                    </h3>
+                  </div>
+
+                  <div className="flex-1 flex flex-col">
+                    <Input
+                      id="pdf-file"
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => {
+                        if (e.target.files) {
+                          const file = e.target.files[0];
+                          setPdfFile(file);
+                        }
+                      }}
+                      className="flex-1"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-neutral-400 mt-2">
+                      Selecione um arquivo PDF (tamanho máximo: 50MB). O arquivo
+                      será processado e dividido em chunks para busca semântica.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botões de ação */}
+              <div className="flex space-x-2 pt-4 border-t">
+                <Button type="submit" disabled={isSubmittingPdf || !pdfFile}>
+                  {isSubmittingPdf
+                    ? 'Processando...'
+                    : 'Adicionar PDF e Extrair Conteúdo'}
+                </Button>
+              </div>
             </form>
           )}
         </div>
@@ -938,6 +1090,29 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                           resource={resource}
                           onDelete={handleDelete}
                           onEdit={handleEditResource}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {activeTab === 'pdf' && (
+                <>
+                  <h3 className="text-md font-medium mb-3 dark:text-neutral-300">
+                    Conteúdos Extraídos de PDFs
+                  </h3>
+                  {pdfResources.length === 0 ? (
+                    <p className="text-center py-6 text-neutral-500 dark:text-neutral-400">
+                      Nenhum conteúdo de PDF adicionado.
+                    </p>
+                  ) : (
+                    <div className="space-y-4 mb-8">
+                      {pdfResources.map((resource) => (
+                        <ResourceItem
+                          key={resource.id}
+                          resource={resource}
+                          onDelete={handleDelete}
                         />
                       ))}
                     </div>
@@ -1106,6 +1281,24 @@ const ResourceItem = ({
 
               <span className="inline-block bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs px-2 py-1 rounded">
                 Link
+              </span>
+            </div>
+          ) : resource.sourceType === 'PDF' ? (
+            // Layout para PDFs
+            <div className="space-y-2">
+              <h4 className="font-medium text-base mb-1 dark:text-white">
+                {resource.content.split('\n')[0].replace(/^#\s+/, '') ||
+                  'Conteúdo de PDF'}
+              </h4>
+
+              <p className="text-sm dark:text-neutral-300">
+                {resource.content.length > 200
+                  ? `${resource.content.substring(0, 200)}...`
+                  : resource.content}
+              </p>
+
+              <span className="inline-block bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 text-xs px-2 py-1 rounded">
+                PDF
               </span>
             </div>
           ) : (

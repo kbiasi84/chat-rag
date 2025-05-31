@@ -208,7 +208,6 @@ export const generateLegalChunks = (text: string): string[] => {
     return true;
   });
 
-  console.log(`Gerados ${validatedChunks.length} chunks jurídicos válidos`);
   return validatedChunks;
 };
 
@@ -377,7 +376,6 @@ const generateStandardChunks = (input: string): string[] => {
     return tokenCount > 0; // Garantir que não há chunks vazios
   });
 
-  console.log(`Gerados ${validatedChunks.length} chunks padrão válidos`);
   return validatedChunks;
 };
 
@@ -397,6 +395,11 @@ const generateChunks = (
     return generateLinkChunks(input, linkMetadata);
   }
 
+  // Para PDFs, usar a função específica de PDFs com overlap e metadados
+  if (sourceType === SourceType.PDF) {
+    return generatePdfChunks(input, linkMetadata);
+  }
+
   // Para outros tipos, usar a abordagem padrão
   return generateStandardChunks(input);
 };
@@ -407,30 +410,26 @@ export const generateEmbeddings = async (
   linkMetadata?: { lei?: string; contexto?: string },
 ): Promise<Array<{ embedding: number[]; content: string }>> => {
   const chunks = generateChunks(value, sourceType, linkMetadata);
-  console.log(`Total de chunks gerados: ${chunks.length}`);
 
   // Validar e filtrar chunks que excedem o limite
-  // Para chunks de links com metadados, permitir tamanho maior
-  const isLinkWithMetadata =
-    sourceType === SourceType.LINK &&
+  // Para chunks de links e PDFs com metadados, permitir tamanho maior
+  const isContentWithMetadata =
+    (sourceType === SourceType.LINK || sourceType === SourceType.PDF) &&
     (linkMetadata?.lei || linkMetadata?.contexto);
-  const tokenLimit = isLinkWithMetadata ? MAX_TOKEN_SIZE + 500 : MAX_TOKEN_SIZE; // Permite 500 tokens extras para metadados de links
+  const tokenLimit = isContentWithMetadata
+    ? MAX_TOKEN_SIZE + 500
+    : MAX_TOKEN_SIZE; // Permite 500 tokens extras para metadados de links/PDFs
 
   const validChunks = chunks.filter((chunk) => {
     const tokenCount = countTokens(chunk);
     if (tokenCount > tokenLimit) {
       console.warn(
-        `Chunk rejeitado por exceder limite: ${tokenCount} tokens > ${tokenLimit} (limite ${isLinkWithMetadata ? 'flexível para links com metadados' : 'padrão'})`,
+        `Chunk rejeitado por exceder limite: ${tokenCount} tokens > ${tokenLimit}`,
       );
-      console.warn(`Conteúdo do chunk: ${chunk.substring(0, 200)}...`);
       return false;
     }
     return true;
   });
-
-  console.log(
-    `Chunks válidos após filtragem: ${validChunks.length} (limite aplicado: ${tokenLimit} tokens)`,
-  );
 
   // Processando chunks em lotes para evitar exceder limites
   const results: Array<{ embedding: number[]; content: string }> = [];
@@ -456,10 +455,6 @@ export const generateEmbeddings = async (
       // Processar o lote atual se não estiver vazio
       if (currentBatch.length > 0) {
         try {
-          console.log(
-            `Processando lote ${batchCount + 1}: ${currentBatch.length} chunks, ${currentBatchTokens} tokens`,
-          );
-
           const { embeddings } = await embedMany({
             model: embeddingModel,
             values: currentBatch,
@@ -497,10 +492,6 @@ export const generateEmbeddings = async (
   // Processar o último lote se houver chunks restantes
   if (currentBatch.length > 0) {
     try {
-      console.log(
-        `Processando lote final ${batchCount + 1}: ${currentBatch.length} chunks, ${currentBatchTokens} tokens`,
-      );
-
       const { embeddings } = await embedMany({
         model: embeddingModel,
         values: currentBatch,
@@ -517,9 +508,6 @@ export const generateEmbeddings = async (
     }
   }
 
-  console.log(
-    `Processamento concluído: ${results.length} embeddings gerados de ${validChunks.length} chunks válidos`,
-  );
   return results;
 };
 
@@ -542,14 +530,16 @@ export const findRelevantContent = async (userQuery: string) => {
       const userQueryEmbedded = await generateEmbedding(normalizedQuery);
       // Calcular similaridade usando distância de cosseno
       const similarity = sql<number>`1 - (${cosineDistance(embeddings.embedding, userQueryEmbedded)})`;
-      // Threshold de similaridade mais baixo para capturar mais resultados
-      const similarityThreshold = 0.2;
+      // Threshold de similaridade otimizado para capturar conteúdo mais relevante
+      const similarityThreshold = 0.25;
       // Buscar fragmentos relevantes - buscamos mais para aplicar filtragem de qualidade
       const similarContent = await db
         .select({
           content: embeddings.content,
           similarity,
           resourceId: embeddings.resourceId,
+          // Incluir informações do recurso para determinar o tipo
+          resourceType: sql<string>`(SELECT source_type FROM resources WHERE resources.id = ${embeddings.resourceId})`,
         })
         .from(embeddings)
         .where(gt(similarity, similarityThreshold))
@@ -561,33 +551,52 @@ export const findRelevantContent = async (userQuery: string) => {
         similarContent,
         minQualityScore,
       );
-      // Implementar diversidade de fontes e controle de tokens
+      // Implementar seleção pura por meritocracia (similaridade + qualidade)
       const processedResults = [];
-      const resourceCount = new Map();
       let totalTokens = 0;
       const MAX_TOTAL_TOKENS = 2500;
+
+      // Estatísticas para monitoramento
+      const resourceCount = new Map();
+      const typeCount = new Map();
+
       for (const item of filteredByQuality) {
         // Contagem precisa de tokens
         const fragmentTokens = countTokens(item.content, 'gpt-4o');
+
         // Verificar limite de tokens
         if (totalTokens + fragmentTokens > MAX_TOTAL_TOKENS) {
           break;
         }
-        // Controlar diversidade de fontes
-        const currentCount = resourceCount.get(item.resourceId) || 0;
-        if (currentCount >= 2) {
-          continue;
-        }
+
+        // Adicionar chunk sem limitação por recurso - pura meritocracia
         processedResults.push({
           ...item,
           tokenCount: fragmentTokens,
         });
+
         totalTokens += fragmentTokens;
-        resourceCount.set(item.resourceId, currentCount + 1);
-        if (processedResults.length >= 6) {
+
+        // Coletar estatísticas para monitoramento
+        const currentResourceCount = resourceCount.get(item.resourceId) || 0;
+        const currentTypeCount =
+          typeCount.get(item.resourceType || 'UNKNOWN') || 0;
+        resourceCount.set(item.resourceId, currentResourceCount + 1);
+        typeCount.set(item.resourceType || 'UNKNOWN', currentTypeCount + 1);
+
+        // Limite máximo de chunks expandido para 8
+        if (processedResults.length >= 8) {
           break;
         }
       }
+
+      // Log simplificado para produção
+      console.log('📊 Retrieval:', {
+        chunks: processedResults.length,
+        tokens: totalTokens,
+        fontes: resourceCount.size,
+      });
+
       return processedResults;
     } catch (embeddingError: unknown) {
       console.error(
@@ -613,17 +622,6 @@ export const generateLinkChunks = (
 ): string[] => {
   const TARGET_CONTENT_TOKENS = 500; // Conteúdo fixo de 500 tokens
   const TARGET_OVERLAP_TOKENS = 120; // Overlap fixo de 120 tokens
-
-  // Calcular tokens dos metadados (sem limitação)
-  const metadataText =
-    linkMetadata?.lei || linkMetadata?.contexto
-      ? `\n\n--- Metadados ---${linkMetadata.lei ? `\n**Lei:** ${linkMetadata.lei}` : ''}${linkMetadata.contexto ? `\n**Contexto:** ${linkMetadata.contexto}` : ''}`
-      : '';
-  const metadataTokens = countTokens(metadataText);
-
-  console.log(
-    `Estratégia flexível: conteúdo=${TARGET_CONTENT_TOKENS}, overlap=${TARGET_OVERLAP_TOKENS}, metadados=${metadataTokens} tokens (sem limite)`,
-  );
 
   // Limpar e preparar texto como conteúdo corrido
   const cleanText = text.trim().replace(/\s+/g, ' ');
@@ -659,21 +657,9 @@ export const generateLinkChunks = (
     // Adicionar metadados (sem limitação de tamanho)
     finalChunk = addLinkMetadata(finalChunk, linkMetadata);
 
-    // Log informativo
-    const contentTokens = countTokens(chunkContent);
-    const overlapTokens = overlapText ? countTokens(overlapText) : 0;
-    const finalTokenCount = countTokens(finalChunk);
-
-    console.log(
-      `Chunk ${i + 1}: conteúdo=${contentTokens}, overlap=${overlapTokens}, metadados=${metadataTokens}, total=${finalTokenCount} tokens`,
-    );
-
     chunksWithOverlap.push(finalChunk);
   }
 
-  console.log(
-    `Gerados ${chunksWithOverlap.length} chunks com metadados flexíveis (500+120+metadados-ilimitados)`,
-  );
   return chunksWithOverlap;
 };
 
@@ -860,11 +846,72 @@ const addLinkMetadata = (
   return enrichedContent;
 };
 
-// Nova função para gerar chunks base menores que acomodem overlap + metadados
-const generateSmallerChunksForLinks = (
+// Função específica para chunking de conteúdo de PDFs com overlap e metadados
+export const generatePdfChunks = (
   text: string,
-  maxTokensPerChunk: number,
+  pdfMetadata?: { lei?: string; contexto?: string },
 ): string[] => {
-  // Agora usa a estratégia simplificada - esta função não é mais necessária
-  return generateSimpleChunks(text, maxTokensPerChunk);
+  const TARGET_CONTENT_TOKENS = 500; // Conteúdo fixo de 500 tokens
+  const TARGET_OVERLAP_TOKENS = 120; // Overlap fixo de 120 tokens
+
+  // Limpar e preparar texto como conteúdo corrido
+  const cleanText = text.trim().replace(/\s+/g, ' ');
+
+  // Gerar chunks com estratégia simples e uniforme
+  const baseChunks = generateSimpleChunks(cleanText, TARGET_CONTENT_TOKENS);
+
+  if (baseChunks.length <= 1) {
+    return baseChunks.map((chunk) => addPdfMetadata(chunk, pdfMetadata));
+  }
+
+  // Aplicar overlap fixo entre chunks
+  const chunksWithOverlap: string[] = [];
+
+  for (let i = 0; i < baseChunks.length; i++) {
+    const chunkContent = baseChunks[i];
+    let overlapText = '';
+
+    // Overlap fixo de 120 tokens do chunk anterior
+    if (i > 0) {
+      const previousChunk = baseChunks[i - 1];
+      overlapText = generateFixedOverlap(previousChunk, TARGET_OVERLAP_TOKENS);
+    }
+
+    // Montar chunk final: overlap + conteúdo + metadados
+    let finalChunk = '';
+    if (overlapText) {
+      finalChunk = `...${overlapText}\n\n${chunkContent}`;
+    } else {
+      finalChunk = chunkContent;
+    }
+
+    // Adicionar metadados (sem limitação de tamanho)
+    finalChunk = addPdfMetadata(finalChunk, pdfMetadata);
+
+    chunksWithOverlap.push(finalChunk);
+  }
+
+  return chunksWithOverlap;
+};
+
+// Função auxiliar para adicionar metadados de lei e contexto nos PDFs
+const addPdfMetadata = (
+  content: string,
+  metadata?: { lei?: string; contexto?: string },
+): string => {
+  let enrichedContent = content;
+
+  if (metadata?.lei || metadata?.contexto) {
+    enrichedContent += '\n\n--- Metadados ---';
+
+    if (metadata.lei) {
+      enrichedContent += `\n**Lei:** ${metadata.lei}`;
+    }
+
+    if (metadata.contexto) {
+      enrichedContent += `\n**Contexto:** ${metadata.contexto}`;
+    }
+  }
+
+  return enrichedContent;
 };

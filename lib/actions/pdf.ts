@@ -1,79 +1,185 @@
 'use server';
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-import { createResource } from './resources';
-import { SourceType } from '@/lib/db/schema/resources';
+import { SourceType, resources } from '@/lib/db/schema/resources';
 import { nanoid } from '@/lib/utils';
-import { PDFDocument } from 'pdf-lib';
+import { generateEmbeddings } from '@/lib/ai/embedding';
+import { db } from '@/lib/db';
+import { embeddings as embeddingsTable } from '@/lib/db/schema/embeddings';
 
-// Função para processar o arquivo PDF e extrair seu texto
+// Função para processar o arquivo PDF e extrair seu texto com metadados
 export async function processPdfFile(
   file: File,
+  metadata?: { lei?: string; contexto?: string },
 ): Promise<{ success: boolean; message: string; resourceId?: string }> {
   try {
-    console.log(
-      `Iniciando processamento do PDF: ${file.name} (${file.size} bytes)`,
-    );
+    // Declarar variáveis no escopo da função
+    let fullText = '';
+    let pageCount = 0;
+    let errorCount = 0;
+    let pdfDocument: any;
+    let pdfContent = '';
+    let title = file.name.replace(/\.[^/.]+$/, ''); // fallback default
 
     const arrayBuffer = await file.arrayBuffer();
-    console.log(
-      `ArrayBuffer criado com tamanho: ${arrayBuffer.byteLength} bytes`,
-    );
 
-    // Carregar o PDF com pdf-lib
-    console.log('Carregando PDF com pdf-lib...');
-    const pdfDoc = await PDFDocument.load(arrayBuffer);
+    // Importação dinâmica para evitar problemas com Turbopack
+    try {
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
-    const pageCount = pdfDoc.getPageCount();
-    console.log(`PDF carregado com sucesso, contém ${pageCount} páginas`);
+      // Configurar worker seguindo o exemplo oficial do repositório
+      try {
+        // Baseado no exemplo oficial: https://github.com/mozilla/pdfjs-dist/tree/master
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'pdfjs-dist/legacy/build/pdf.worker.mjs';
+      } catch (workerError) {
+        // Se falhar, tentar definir como string vazia
+        try {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        } catch (e) {
+          // Ignorar erro do worker
+        }
+      }
 
-    // Extrair o texto de cada página
-    let pdfText = '';
+      // Usar a abordagem oficial da documentação
+      const loadingTask = pdfjsLib.getDocument({
+        data: arrayBuffer,
+        verbosity: 0, // Minimizar logs internos
+      });
 
-    // Extrair metadados do PDF se disponíveis
-    const title = pdfDoc.getTitle() || file.name.replace(/\.[^/.]+$/, '');
-    const author = pdfDoc.getAuthor() || 'Não especificado';
-    const creator = pdfDoc.getCreator() || 'Não especificado';
+      pdfDocument = await loadingTask.promise;
 
-    // Adicionar os metadados no início do texto
-    pdfText += `# ${title}\n\n`;
-    pdfText += `**Autor:** ${author}\n`;
-    pdfText += `**Criador:** ${creator}\n`;
-    pdfText += `**Páginas:** ${pageCount}\n\n`;
-    pdfText += `**Nota:** Este texto foi extraído automaticamente do PDF "${file.name}" e pode não conter toda a formatação original.\n\n`;
+      // Extrair texto de cada página
+      for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+        try {
+          const page = await pdfDocument.getPage(pageNum);
+          const textContent = await page.getTextContent();
 
-    // Adicionar uma observação sobre o conteúdo
-    pdfText += '## Conteúdo do PDF\n\n';
-    pdfText +=
-      'O conteúdo deste PDF foi processado para indexação e pesquisa, mas o texto extraído diretamente pode não estar disponível na íntegra devido a limitações do processo de extração.\n\n';
+          // Combinar todos os itens de texto da página
+          const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ');
 
-    // Gerar um ID único para o arquivo PDF
-    const pdfId = nanoid();
-    console.log(`ID gerado para o PDF: ${pdfId}`);
+          if (pageText.trim()) {
+            fullText += `\n\n--- Página ${pageNum} ---\n\n${pageText.trim()}`;
+            pageCount++;
+          }
+        } catch (pageError) {
+          errorCount++;
+          console.error(`Erro ao processar página ${pageNum}:`, pageError);
+          // Continua com as outras páginas
+        }
+      }
+    } catch (importError) {
+      console.error('Erro ao importar ou usar pdfjs-dist:', importError);
+      throw importError;
+    }
 
-    // Adicionar à base de conhecimento com sourceType = PDF
-    console.log('Adicionando conteúdo à base de conhecimento...');
-    const result = await createResource({
-      content: pdfText,
-      sourceType: SourceType.PDF,
-      sourceId: pdfId,
-    });
-
-    console.log(`Resultado da criação do recurso: ${result}`);
-
-    if (typeof result === 'string' && result.includes('successfully')) {
+    // Verificar se conseguimos extrair texto
+    if (!fullText.trim()) {
+      console.error('Nenhum texto foi extraído do PDF');
       return {
-        success: true,
-        message: `PDF "${title}" processado e adicionado com sucesso.`,
-        resourceId: pdfId,
+        success: false,
+        message:
+          'Não foi possível extrair texto do PDF. O arquivo pode conter apenas imagens ou estar protegido.',
       };
     }
 
-    return {
-      success: false,
-      message: 'Erro ao adicionar o conteúdo do PDF à base de conhecimento.',
-    };
+    // Extrair metadados do PDF
+    try {
+      const metadata_info = await pdfDocument.getMetadata();
+      title = (metadata_info.info as any)?.Title || title;
+      const author = (metadata_info.info as any)?.Author || 'Não especificado';
+      const creator =
+        (metadata_info.info as any)?.Creator || 'Não especificado';
+
+      // Construir o conteúdo formatado com o texto real extraído
+      pdfContent = `# ${title}\n\n`;
+      pdfContent += `**Arquivo:** ${file.name}\n`;
+      pdfContent += `**Autor:** ${author}\n`;
+      pdfContent += `**Criador:** ${creator}\n`;
+      pdfContent += `**Páginas:** ${pdfDocument.numPages}\n`;
+      pdfContent += `**Caracteres extraídos:** ${fullText.length}\n\n`;
+
+      // Adicionar metadados opcionais se fornecidos
+      if (metadata?.lei) {
+        pdfContent += `**Lei:** ${metadata.lei}\n`;
+      }
+      if (metadata?.contexto) {
+        pdfContent += `**Contexto:** ${metadata.contexto}\n`;
+      }
+
+      pdfContent += '\n## Conteúdo Extraído\n\n';
+
+      // Adicionar o texto real extraído do PDF
+      pdfContent += fullText.trim();
+    } catch (metadataError) {
+      console.error('Erro ao extrair metadados:', metadataError);
+
+      // Fallback sem metadados
+      const author = 'Não especificado';
+      const creator = 'Não especificado';
+
+      pdfContent = `# ${title}\n\n`;
+      pdfContent += `**Arquivo:** ${file.name}\n`;
+      pdfContent += `**Autor:** ${author}\n`;
+      pdfContent += `**Criador:** ${creator}\n`;
+      pdfContent += `**Páginas:** ${pdfDocument.numPages}\n`;
+      pdfContent += `**Caracteres extraídos:** ${fullText.length}\n\n`;
+
+      if (metadata?.lei) {
+        pdfContent += `**Lei:** ${metadata.lei}\n`;
+      }
+      if (metadata?.contexto) {
+        pdfContent += `**Contexto:** ${metadata.contexto}\n`;
+      }
+
+      pdfContent += '\n## Conteúdo Extraído\n\n';
+      pdfContent += fullText.trim();
+    }
+
+    // Gerar um ID único para o arquivo PDF
+    const pdfId = `pdf-${nanoid()}`;
+
+    // Adicionar à base de conhecimento
+    try {
+      const [mainResource] = await db
+        .insert(resources)
+        .values({
+          content: pdfContent,
+          sourceType: SourceType.PDF,
+          sourceId: pdfId,
+        })
+        .returning();
+
+      // Gerar embeddings usando o sistema específico para PDFs
+      const pdfMetadata = {
+        lei: metadata?.lei || undefined,
+        contexto: metadata?.contexto || undefined,
+      };
+
+      const contentEmbeddings = await generateEmbeddings(
+        pdfContent,
+        SourceType.PDF,
+        pdfMetadata,
+      );
+
+      // Inserir embeddings
+      await db.insert(embeddingsTable).values(
+        contentEmbeddings.map((embedding) => ({
+          resourceId: mainResource.id,
+          ...embedding,
+        })),
+      );
+
+      return {
+        success: true,
+        message: `PDF "${title}" processado e adicionado com sucesso com ${contentEmbeddings.length} chunks.`,
+        resourceId: pdfId,
+      };
+    } catch (dbError) {
+      console.error('Erro nas operações de banco de dados:', dbError);
+      throw dbError;
+    }
   } catch (error) {
     console.error('Erro ao processar o arquivo PDF:', error);
 
@@ -82,9 +188,6 @@ export async function processPdfFile(
       'Erro ao processar o arquivo PDF. Verifique se o arquivo é válido.';
 
     if (error instanceof Error) {
-      console.error('Detalhes do erro:', error.message);
-      console.error('Stack trace:', error.stack);
-
       if (error.message.includes('password')) {
         errorMessage =
           'O PDF está protegido por senha e não pode ser processado.';
@@ -109,41 +212,47 @@ export async function processPdfFile(
 // Server Action para processar upload de PDF diretamente do frontend
 export async function uploadPdf(formData: FormData) {
   try {
-    console.log('Iniciando processamento do upload de PDF');
     const file = formData.get('file') as File | null;
+    const lei = formData.get('lei') as string | null;
+    const contexto = formData.get('contexto') as string | null;
 
     if (!file) {
-      console.error('Nenhum arquivo enviado no FormData');
       return {
         success: false,
         message: 'Nenhum arquivo enviado',
       };
     }
 
-    console.log(
-      `Arquivo recebido: ${file.name}, ${file.size} bytes, tipo: ${file.type}`,
-    );
-
     // Verificar se o arquivo é um PDF
     if (!file.name.toLowerCase().endsWith('.pdf')) {
-      console.error(
-        `Tipo de arquivo inválido: ${file.type}, nome: ${file.name}`,
-      );
       return {
         success: false,
         message: 'O arquivo deve ser um PDF',
       };
     }
 
+    // Verificar tamanho do arquivo (limite de 50MB = 50 * 1024 * 1024 bytes)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    if (file.size > MAX_FILE_SIZE) {
+      return {
+        success: false,
+        message: `Arquivo muito grande. O tamanho máximo permitido é 50MB. Seu arquivo tem ${Math.round(file.size / (1024 * 1024))}MB.`,
+      };
+    }
+
+    // Preparar metadados
+    const metadata: { lei?: string; contexto?: string } = {};
+    if (lei?.trim()) {
+      metadata.lei = lei.trim();
+    }
+    if (contexto?.trim()) {
+      metadata.contexto = contexto.trim();
+    }
+
     // Processar o arquivo PDF
-    console.log('Chamando função de processamento de PDF...');
-    return await processPdfFile(file);
+    return await processPdfFile(file, metadata);
   } catch (error) {
     console.error('Erro ao processar upload de PDF:', error);
-    if (error instanceof Error) {
-      console.error('Detalhes do erro:', error.message);
-      console.error('Stack trace:', error.stack);
-    }
     return {
       success: false,
       message: 'Erro ao processar o upload do arquivo',

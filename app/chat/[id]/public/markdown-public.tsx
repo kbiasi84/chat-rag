@@ -4,6 +4,11 @@ import Link from 'next/link';
 import { memo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+
+// Importar CSS do KaTeX
+import 'katex/dist/katex.min.css';
 
 // Componente de bloco de código simplificado
 function SimpleCodeBlock({
@@ -126,13 +131,18 @@ const components: Partial<Components> = {
   ),
 };
 
-// Plugins de Markdown
-const remarkPlugins = [remarkGfm];
+// Plugins de Markdown com suporte a matemática
+const remarkPlugins = [remarkGfm, remarkMath];
+const rehypePlugins = [rehypeKatex];
 
 // Componente de Markdown não memorizado
 function NonMemoizedPublicMarkdown({ children }: { children: string }) {
   return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+    <ReactMarkdown 
+      remarkPlugins={remarkPlugins} 
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
       {children}
     </ReactMarkdown>
   );

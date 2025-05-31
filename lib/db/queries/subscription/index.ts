@@ -144,6 +144,33 @@ export async function incrementConsultasUsadas(userId: string) {
 }
 
 /**
+ * Decrementa o contador de consultas usadas (quando a resposta não foi útil)
+ */
+export async function decrementConsultasUsadas(userId: string) {
+  try {
+    const userSubscription = await getUserSubscription(userId);
+    if (!userSubscription) {
+      throw new Error('Assinatura não encontrada');
+    }
+
+    // Garantir que não vai para valores negativos
+    const novoValor = Math.max(0, userSubscription.consultasUsadas - 1);
+
+    await db
+      .update(subscription)
+      .set({
+        consultasUsadas: novoValor,
+        atualizadoEm: new Date(),
+      })
+      .where(eq(subscription.id, userSubscription.id));
+    return novoValor;
+  } catch (error) {
+    console.error('Falha ao decrementar consultas usadas:', error);
+    throw new Error('Não foi possível decrementar o contador de consultas');
+  }
+}
+
+/**
  * Verifica se o usuário ainda tem consultas disponíveis
  */
 export async function checkConsultaDisponivel(

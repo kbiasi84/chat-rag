@@ -14,7 +14,10 @@ import {
   updateChatTitle,
 } from '@/lib/db/queries/chat';
 import { saveMessages } from '@/lib/db/queries/message';
-import { incrementConsultasUsadas } from '@/lib/db/queries/subscription';
+import {
+  incrementConsultasUsadas,
+  decrementConsultasUsadas,
+} from '@/lib/db/queries/subscription';
 import { verificarLimiteConsulta } from '@/lib/actions/subscription';
 import {
   generateUUID,
@@ -94,6 +97,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // 🎯 ESTRATÉGIA DE COBRANÇA JUSTA:
+    // Incrementamos imediatamente para evitar abuso (múltiplas chamadas simultâneas)
+    // Mas decrementamos no onFinish se a resposta não foi útil (sem contexto da base)
     await incrementConsultasUsadas(session.user.id);
 
     const chat = await getChatById({ id });
@@ -212,9 +218,16 @@ export async function POST(request: Request) {
                   'Ainda não fui treinada com esse conhecimento específico para suporte',
                 );
 
-                // Se não encontrou conhecimento, enviar email de notificação
+                // 🎯 NOVA LÓGICA: Se não encontrou conhecimento, DECREMENTAR contador e enviar email
                 if (isKnowledgeNotFound) {
                   try {
+                    // Decrementar o contador - devolver a consulta ao usuário
+                    await decrementConsultasUsadas(session.user.id);
+
+                    console.log(
+                      `📉 Consulta decrementada para usuário ${session.user.id} - resposta sem contexto da base de conhecimento`,
+                    );
+
                     const userQuestion = extractTextFromParts(
                       userMessage.parts || [],
                     );
@@ -239,7 +252,7 @@ export async function POST(request: Request) {
                     );
 
                     console.log(
-                      `Email de solicitação de conhecimento enviado para pergunta: ${userQuestion.substring(0, 100)}...`,
+                      `📧 Email de solicitação de conhecimento enviado para pergunta: ${userQuestion.substring(0, 100)}...`,
                     );
                   } catch (emailError) {
                     console.error(
@@ -247,6 +260,11 @@ export async function POST(request: Request) {
                       emailError,
                     );
                   }
+                } else {
+                  // ✅ Resposta útil - manter o incremento do contador
+                  console.log(
+                    `📈 Consulta válida contabilizada para usuário ${session.user.id} - resposta com contexto da base de conhecimento`,
+                  );
                 }
 
                 await saveMessages({

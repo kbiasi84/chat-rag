@@ -2,7 +2,12 @@ import Link from 'next/link';
 import React, { memo } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { CodeBlock } from '@/components/editor/code-block';
+
+// Importar CSS do KaTeX
+import 'katex/dist/katex.min.css';
 
 // Função para limpar textos de debug e metadados
 const cleanMarkdownText = (text: string): string => {
@@ -99,14 +104,20 @@ const components: Partial<Components> = {
   },
 };
 
-const remarkPlugins = [remarkGfm];
+// Adicionar plugins para matemática
+const remarkPlugins = [remarkGfm, remarkMath];
+const rehypePlugins = [rehypeKatex];
 
 const NonMemoizedMarkdown = ({ children }: { children: string }) => {
   // Limpar o texto antes de renderizar
   const cleanedText = cleanMarkdownText(children);
 
   return (
-    <ReactMarkdown remarkPlugins={remarkPlugins} components={components}>
+    <ReactMarkdown
+      remarkPlugins={remarkPlugins}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
       {cleanedText}
     </ReactMarkdown>
   );
