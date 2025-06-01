@@ -34,7 +34,7 @@ export async function middleware(request: NextRequest) {
 
   // Se for um caminho público ou página de chat público, permitir acesso
   if (isPublicPath || isPublicChatPage) {
-    console.log('Acesso a conteúdo público permitido:', pathname);
+    //console.log('Acesso a conteúdo público permitido:', pathname);
     return NextResponse.next();
   }
 

@@ -12,6 +12,10 @@ export async function processPdfFile(
   metadata?: { lei?: string; contexto?: string },
 ): Promise<{ success: boolean; message: string; resourceId?: string }> {
   try {
+    console.log('🔍 [PDF] Iniciando processamento do PDF:', file.name);
+    console.log('🔍 [PDF] Tamanho do arquivo:', file.size, 'bytes');
+    console.log('🔍 [PDF] Metadados fornecidos:', metadata);
+
     // Declarar variáveis no escopo da função
     let fullText = '';
     let pageCount = 0;
@@ -21,6 +25,10 @@ export async function processPdfFile(
     let title = file.name.replace(/\.[^/.]+$/, ''); // fallback default
 
     const arrayBuffer = await file.arrayBuffer();
+    console.log(
+      '🔍 [PDF] ArrayBuffer criado com tamanho:',
+      arrayBuffer.byteLength,
+    );
 
     // Importação dinâmica para evitar problemas com Turbopack
     try {
@@ -47,6 +55,10 @@ export async function processPdfFile(
       });
 
       pdfDocument = await loadingTask.promise;
+      console.log(
+        '🔍 [PDF] PDF carregado com sucesso. Número de páginas:',
+        pdfDocument.numPages,
+      );
 
       // Extrair texto de cada página
       for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
@@ -62,21 +74,37 @@ export async function processPdfFile(
           if (pageText.trim()) {
             fullText += `\n\n--- Página ${pageNum} ---\n\n${pageText.trim()}`;
             pageCount++;
+            console.log(
+              `🔍 [PDF] Página ${pageNum} processada. Caracteres extraídos: ${pageText.trim().length}`,
+            );
+          } else {
+            console.log(`⚠️ [PDF] Página ${pageNum} vazia ou sem texto`);
           }
         } catch (pageError) {
           errorCount++;
-          console.error(`Erro ao processar página ${pageNum}:`, pageError);
+          console.error(
+            `❌ [PDF] Erro ao processar página ${pageNum}:`,
+            pageError,
+          );
           // Continua com as outras páginas
         }
       }
+
+      console.log('🔍 [PDF] Extração de texto concluída:');
+      console.log('  - Páginas processadas:', pageCount);
+      console.log('  - Páginas com erro:', errorCount);
+      console.log('  - Total de caracteres extraídos:', fullText.length);
     } catch (importError) {
-      console.error('Erro ao importar ou usar pdfjs-dist:', importError);
+      console.error(
+        '❌ [PDF] Erro ao importar ou usar pdfjs-dist:',
+        importError,
+      );
       throw importError;
     }
 
     // Verificar se conseguimos extrair texto
     if (!fullText.trim()) {
-      console.error('Nenhum texto foi extraído do PDF');
+      console.error('❌ [PDF] Nenhum texto foi extraído do PDF');
       return {
         success: false,
         message:
@@ -91,6 +119,11 @@ export async function processPdfFile(
       const author = (metadata_info.info as any)?.Author || 'Não especificado';
       const creator =
         (metadata_info.info as any)?.Creator || 'Não especificado';
+
+      console.log('🔍 [PDF] Metadados extraídos:');
+      console.log('  - Título:', title);
+      console.log('  - Autor:', author);
+      console.log('  - Criador:', creator);
 
       // Construir o conteúdo formatado com o texto real extraído
       pdfContent = `# ${title}\n\n`;
@@ -113,7 +146,7 @@ export async function processPdfFile(
       // Adicionar o texto real extraído do PDF
       pdfContent += fullText.trim();
     } catch (metadataError) {
-      console.error('Erro ao extrair metadados:', metadataError);
+      console.error('⚠️ [PDF] Erro ao extrair metadados:', metadataError);
 
       // Fallback sem metadados
       const author = 'Não especificado';
@@ -137,11 +170,19 @@ export async function processPdfFile(
       pdfContent += fullText.trim();
     }
 
+    console.log(
+      '🔍 [PDF] Conteúdo final preparado. Tamanho total:',
+      pdfContent.length,
+      'caracteres',
+    );
+
     // Gerar um ID único para o arquivo PDF
     const pdfId = `pdf-${nanoid()}`;
+    console.log('🔍 [PDF] ID gerado para o recurso:', pdfId);
 
     // Adicionar à base de conhecimento
     try {
+      console.log('🔍 [DB] Inserindo recurso no banco de dados...');
       const [mainResource] = await db
         .insert(resources)
         .values({
@@ -151,11 +192,23 @@ export async function processPdfFile(
         })
         .returning();
 
+      console.log(
+        '✅ [DB] Recurso inserido com sucesso. ID do banco:',
+        mainResource.id,
+      );
+
       // Gerar embeddings usando o sistema específico para PDFs
       const pdfMetadata = {
         lei: metadata?.lei || undefined,
         contexto: metadata?.contexto || undefined,
       };
+
+      console.log('🔍 [EMBEDDINGS] Iniciando geração de embeddings...');
+      console.log('🔍 [EMBEDDINGS] Metadados para embeddings:', pdfMetadata);
+      console.log(
+        '🔍 [EMBEDDINGS] Tamanho do conteúdo para embeddings:',
+        pdfContent.length,
+      );
 
       const contentEmbeddings = await generateEmbeddings(
         pdfContent,
@@ -163,12 +216,45 @@ export async function processPdfFile(
         pdfMetadata,
       );
 
+      console.log('✅ [EMBEDDINGS] Embeddings gerados com sucesso!');
+      console.log(
+        '🔍 [EMBEDDINGS] Número de chunks/embeddings criados:',
+        contentEmbeddings.length,
+      );
+
+      // Log detalhado dos embeddings gerados
+      contentEmbeddings.forEach((embedding, index) => {
+        console.log(`🔍 [EMBEDDINGS] Chunk ${index + 1}:`, {
+          conteudoLength: embedding.content?.length || 0,
+          hasEmbedding: !!embedding.embedding,
+          embeddingLength: embedding.embedding?.length || 0,
+        });
+      });
+
       // Inserir embeddings
-      await db.insert(embeddingsTable).values(
-        contentEmbeddings.map((embedding) => ({
-          resourceId: mainResource.id,
-          ...embedding,
-        })),
+      console.log('🔍 [DB] Inserindo embeddings no banco de dados...');
+      const embeddingsToInsert = contentEmbeddings.map((embedding) => ({
+        resourceId: mainResource.id,
+        ...embedding,
+      }));
+
+      console.log(
+        '🔍 [DB] Dados a inserir:',
+        embeddingsToInsert.length,
+        'embeddings',
+      );
+
+      const insertedEmbeddings = await db
+        .insert(embeddingsTable)
+        .values(embeddingsToInsert);
+
+      console.log(
+        '✅ [DB] Embeddings inseridos com sucesso no banco de dados!',
+      );
+      console.log('🔍 [DB] Resultado da inserção:', insertedEmbeddings);
+
+      console.log(
+        '🎉 [PDF] Processamento completo do PDF finalizado com sucesso!',
       );
 
       return {
@@ -177,11 +263,11 @@ export async function processPdfFile(
         resourceId: pdfId,
       };
     } catch (dbError) {
-      console.error('Erro nas operações de banco de dados:', dbError);
+      console.error('❌ [DB] Erro nas operações de banco de dados:', dbError);
       throw dbError;
     }
   } catch (error) {
-    console.error('Erro ao processar o arquivo PDF:', error);
+    console.error('❌ [PDF] Erro geral ao processar o arquivo PDF:', error);
 
     // Determinar um erro mais específico com base no tipo de erro
     let errorMessage =
@@ -212,11 +298,22 @@ export async function processPdfFile(
 // Server Action para processar upload de PDF diretamente do frontend
 export async function uploadPdf(formData: FormData) {
   try {
+    console.log('🔍 [UPLOAD] Iniciando upload de PDF...');
+
     const file = formData.get('file') as File | null;
     const lei = formData.get('lei') as string | null;
     const contexto = formData.get('contexto') as string | null;
 
+    console.log('🔍 [UPLOAD] Dados recebidos:', {
+      hasFile: !!file,
+      fileName: file?.name,
+      fileSize: file?.size,
+      lei: lei,
+      contexto: contexto,
+    });
+
     if (!file) {
+      console.error('❌ [UPLOAD] Nenhum arquivo enviado');
       return {
         success: false,
         message: 'Nenhum arquivo enviado',
@@ -225,6 +322,7 @@ export async function uploadPdf(formData: FormData) {
 
     // Verificar se o arquivo é um PDF
     if (!file.name.toLowerCase().endsWith('.pdf')) {
+      console.error('❌ [UPLOAD] Arquivo não é PDF:', file.name);
       return {
         success: false,
         message: 'O arquivo deve ser um PDF',
@@ -234,6 +332,7 @@ export async function uploadPdf(formData: FormData) {
     // Verificar tamanho do arquivo (limite de 50MB = 50 * 1024 * 1024 bytes)
     const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
     if (file.size > MAX_FILE_SIZE) {
+      console.error('❌ [UPLOAD] Arquivo muito grande:', file.size, 'bytes');
       return {
         success: false,
         message: `Arquivo muito grande. O tamanho máximo permitido é 50MB. Seu arquivo tem ${Math.round(file.size / (1024 * 1024))}MB.`,
@@ -249,10 +348,17 @@ export async function uploadPdf(formData: FormData) {
       metadata.contexto = contexto.trim();
     }
 
+    console.log('🔍 [UPLOAD] Metadados preparados:', metadata);
+    console.log('🔍 [UPLOAD] Chamando processPdfFile...');
+
     // Processar o arquivo PDF
-    return await processPdfFile(file, metadata);
+    const result = await processPdfFile(file, metadata);
+
+    console.log('🔍 [UPLOAD] Resultado do processamento:', result);
+
+    return result;
   } catch (error) {
-    console.error('Erro ao processar upload de PDF:', error);
+    console.error('❌ [UPLOAD] Erro ao processar upload de PDF:', error);
     return {
       success: false,
       message: 'Erro ao processar o upload do arquivo',
