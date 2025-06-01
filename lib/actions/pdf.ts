@@ -30,33 +30,127 @@ export async function processPdfFile(
       arrayBuffer.byteLength,
     );
 
-    // Importação dinâmica para evitar problemas com Turbopack
+    // Configuração específica para servidor Node.js
     try {
-      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      console.log('🔍 [PDF] Configurando ambiente Node.js para pdfjs-dist...');
 
-      // Configurar worker seguindo o exemplo oficial do repositório
-      try {
-        // Baseado no exemplo oficial: https://github.com/mozilla/pdfjs-dist/tree/master
-        pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'pdfjs-dist/legacy/build/pdf.worker.mjs';
-      } catch (workerError) {
-        // Se falhar, tentar definir como string vazia
-        try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-        } catch (e) {
-          // Ignorar erro do worker
-        }
+      // Polyfills simples para APIs do browser que não existem no Node.js
+      if (typeof globalThis.DOMMatrix === 'undefined') {
+        console.log('🔧 [PDF] Adicionando polyfill para DOMMatrix...');
+        (globalThis as any).DOMMatrix = () => ({
+          a: 1,
+          b: 0,
+          c: 0,
+          d: 1,
+          e: 0,
+          f: 0,
+          fromMatrix: () => (globalThis as any).DOMMatrix(),
+          fromFloat32Array: () => (globalThis as any).DOMMatrix(),
+          fromFloat64Array: () => (globalThis as any).DOMMatrix(),
+          inverse: () => (globalThis as any).DOMMatrix(),
+          multiply: () => (globalThis as any).DOMMatrix(),
+          translate: () => (globalThis as any).DOMMatrix(),
+          scale: () => (globalThis as any).DOMMatrix(),
+          rotate: () => (globalThis as any).DOMMatrix(),
+        });
+        (globalThis as any).DOMMatrix.fromMatrix = () =>
+          (globalThis as any).DOMMatrix();
+        (globalThis as any).DOMMatrix.fromFloat32Array = () =>
+          (globalThis as any).DOMMatrix();
+        (globalThis as any).DOMMatrix.fromFloat64Array = () =>
+          (globalThis as any).DOMMatrix();
       }
 
-      // Usar a abordagem oficial da documentação
+      if (typeof globalThis.Path2D === 'undefined') {
+        console.log('🔧 [PDF] Adicionando polyfill para Path2D...');
+        (globalThis as any).Path2D = () => ({
+          addPath: () => {},
+          closePath: () => {},
+          moveTo: () => {},
+          lineTo: () => {},
+          bezierCurveTo: () => {},
+          quadraticCurveTo: () => {},
+          arc: () => {},
+          arcTo: () => {},
+          ellipse: () => {},
+          rect: () => {},
+          roundRect: () => {},
+        });
+      }
+
+      if (typeof globalThis.OffscreenCanvas === 'undefined') {
+        console.log('🔧 [PDF] Adicionando polyfill para OffscreenCanvas...');
+        (globalThis as any).OffscreenCanvas = (
+          width: number,
+          height: number,
+        ) => ({
+          width,
+          height,
+          getContext: () => ({
+            canvas: { width, height },
+            fillRect: () => {},
+            clearRect: () => {},
+            getImageData: () => ({
+              data: new Uint8ClampedArray(width * height * 4),
+            }),
+            putImageData: () => {},
+            createImageData: () => ({
+              data: new Uint8ClampedArray(width * height * 4),
+            }),
+            setTransform: () => {},
+            drawImage: () => {},
+            save: () => {},
+            restore: () => {},
+            scale: () => {},
+            rotate: () => {},
+            translate: () => {},
+            transform: () => {},
+            globalAlpha: 1,
+            globalCompositeOperation: 'source-over',
+            fillStyle: '#000000',
+            strokeStyle: '#000000',
+            lineWidth: 1,
+          }),
+          transferToImageBitmap: () => ({ width, height }),
+        });
+      }
+
+      console.log('✅ [PDF] Polyfills configurados com sucesso');
+
+      // Importação dinâmica do pdfjs-dist
+      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      console.log('✅ [PDF] pdfjs-dist importado com sucesso');
+
+      // Configuração específica para Node.js - desabilitar worker
+      console.log('🔧 [PDF] Configurando worker para ambiente Node.js...');
+      try {
+        // Desabilitar worker completamente para ambiente servidor
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        (pdfjsLib.GlobalWorkerOptions as any).workerPort = null;
+        console.log('✅ [PDF] Worker desabilitado para ambiente servidor');
+      } catch (workerError) {
+        console.log(
+          '⚠️ [PDF] Erro ao configurar worker (continuando):',
+          (workerError as Error).message,
+        );
+      }
+
+      // Configuração específica para servidor Node.js
       const loadingTask = pdfjsLib.getDocument({
         data: arrayBuffer,
         verbosity: 0, // Minimizar logs internos
+        useSystemFonts: false, // Desabilitar fontes do sistema
+        disableFontFace: true, // Desabilitar font face
+        isEvalSupported: false, // Desabilitar eval por segurança
+        disableRange: true, // Desabilitar requisições de range
+        disableStream: true, // Desabilitar streaming
+        stopAtErrors: false, // Não parar em erros menores
       });
 
+      console.log('🔍 [PDF] Carregando documento PDF...');
       pdfDocument = await loadingTask.promise;
       console.log(
-        '🔍 [PDF] PDF carregado com sucesso. Número de páginas:',
+        '✅ [PDF] PDF carregado com sucesso. Número de páginas:',
         pdfDocument.numPages,
       );
 
@@ -64,7 +158,10 @@ export async function processPdfFile(
       for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
         try {
           const page = await pdfDocument.getPage(pageNum);
-          const textContent = await page.getTextContent();
+          const textContent = await page.getTextContent({
+            normalizeWhitespace: true, // Normalizar espaços em branco
+            disableCombineTextItems: false, // Permitir combinar itens de texto
+          });
 
           // Combinar todos os itens de texto da página
           const pageText = textContent.items
