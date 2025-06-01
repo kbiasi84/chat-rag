@@ -1,5 +1,8 @@
 'use server';
 
+// IMPORTANTE: Este import deve ser o primeiro para garantir que os polyfills sejam carregados
+import '@/lib/polyfills/node-browser-polyfills';
+
 import { SourceType, resources } from '@/lib/db/schema/resources';
 import { nanoid } from '@/lib/utils';
 import { generateEmbeddings } from '@/lib/ai/embedding';
@@ -30,92 +33,9 @@ export async function processPdfFile(
       arrayBuffer.byteLength,
     );
 
-    // Configuração específica para servidor Node.js
+    // Importação e configuração do pdfjs-dist
     try {
-      console.log('🔍 [PDF] Configurando ambiente Node.js para pdfjs-dist...');
-
-      // Polyfills simples para APIs do browser que não existem no Node.js
-      if (typeof globalThis.DOMMatrix === 'undefined') {
-        console.log('🔧 [PDF] Adicionando polyfill para DOMMatrix...');
-        (globalThis as any).DOMMatrix = () => ({
-          a: 1,
-          b: 0,
-          c: 0,
-          d: 1,
-          e: 0,
-          f: 0,
-          fromMatrix: () => (globalThis as any).DOMMatrix(),
-          fromFloat32Array: () => (globalThis as any).DOMMatrix(),
-          fromFloat64Array: () => (globalThis as any).DOMMatrix(),
-          inverse: () => (globalThis as any).DOMMatrix(),
-          multiply: () => (globalThis as any).DOMMatrix(),
-          translate: () => (globalThis as any).DOMMatrix(),
-          scale: () => (globalThis as any).DOMMatrix(),
-          rotate: () => (globalThis as any).DOMMatrix(),
-        });
-        (globalThis as any).DOMMatrix.fromMatrix = () =>
-          (globalThis as any).DOMMatrix();
-        (globalThis as any).DOMMatrix.fromFloat32Array = () =>
-          (globalThis as any).DOMMatrix();
-        (globalThis as any).DOMMatrix.fromFloat64Array = () =>
-          (globalThis as any).DOMMatrix();
-      }
-
-      if (typeof globalThis.Path2D === 'undefined') {
-        console.log('🔧 [PDF] Adicionando polyfill para Path2D...');
-        (globalThis as any).Path2D = () => ({
-          addPath: () => {},
-          closePath: () => {},
-          moveTo: () => {},
-          lineTo: () => {},
-          bezierCurveTo: () => {},
-          quadraticCurveTo: () => {},
-          arc: () => {},
-          arcTo: () => {},
-          ellipse: () => {},
-          rect: () => {},
-          roundRect: () => {},
-        });
-      }
-
-      if (typeof globalThis.OffscreenCanvas === 'undefined') {
-        console.log('🔧 [PDF] Adicionando polyfill para OffscreenCanvas...');
-        (globalThis as any).OffscreenCanvas = (
-          width: number,
-          height: number,
-        ) => ({
-          width,
-          height,
-          getContext: () => ({
-            canvas: { width, height },
-            fillRect: () => {},
-            clearRect: () => {},
-            getImageData: () => ({
-              data: new Uint8ClampedArray(width * height * 4),
-            }),
-            putImageData: () => {},
-            createImageData: () => ({
-              data: new Uint8ClampedArray(width * height * 4),
-            }),
-            setTransform: () => {},
-            drawImage: () => {},
-            save: () => {},
-            restore: () => {},
-            scale: () => {},
-            rotate: () => {},
-            translate: () => {},
-            transform: () => {},
-            globalAlpha: 1,
-            globalCompositeOperation: 'source-over',
-            fillStyle: '#000000',
-            strokeStyle: '#000000',
-            lineWidth: 1,
-          }),
-          transferToImageBitmap: () => ({ width, height }),
-        });
-      }
-
-      console.log('✅ [PDF] Polyfills configurados com sucesso');
+      console.log('🔍 [PDF] Importando pdfjs-dist...');
 
       // Importação dinâmica do pdfjs-dist
       const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
