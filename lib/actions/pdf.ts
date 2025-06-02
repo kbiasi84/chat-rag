@@ -5,6 +5,7 @@ import { nanoid } from '@/lib/utils';
 import { generateEmbeddings } from '@/lib/ai/embedding';
 import { db } from '@/lib/db';
 import { embeddings as embeddingsTable } from '@/lib/db/schema/embeddings';
+import { countTokens } from '@/lib/ai/utils/token-counter';
 
 // Função para processar o arquivo PDF e extrair seu texto com metadados
 export async function processPdfFile(
@@ -173,11 +174,26 @@ export async function processPdfFile(
 
       // Log detalhado dos embeddings gerados
       contentEmbeddings.forEach((embedding, index) => {
+        const tokenCount = embedding.content ? countTokens(embedding.content) : 0;
         console.log(`🔍 [EMBEDDINGS] Chunk ${index + 1}:`, {
           conteudoLength: embedding.content?.length || 0,
+          tokenCount: tokenCount,
           hasEmbedding: !!embedding.embedding,
           embeddingLength: embedding.embedding?.length || 0,
         });
+      });
+
+      // Log de resumo dos tokens
+      const totalTokens = contentEmbeddings.reduce((total, embedding) => {
+        return total + (embedding.content ? countTokens(embedding.content) : 0);
+      }, 0);
+      const averageTokens = Math.round(totalTokens / contentEmbeddings.length);
+      
+      console.log('📊 [EMBEDDINGS] Resumo dos tokens:', {
+        totalChunks: contentEmbeddings.length,
+        totalTokens: totalTokens,
+        averageTokensPerChunk: averageTokens,
+        averageCharactersPerChunk: Math.round(pdfContent.length / contentEmbeddings.length)
       });
 
       // Inserir embeddings
