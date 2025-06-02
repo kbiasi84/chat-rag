@@ -41,18 +41,46 @@ export async function processPdfFile(
       const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
       console.log('✅ [PDF] pdfjs-dist importado com sucesso');
 
-      // Configuração específica para Node.js - desabilitar worker
+      // Configuração específica para Node.js - configurar worker adequadamente
       console.log('🔧 [PDF] Configurando worker para ambiente Node.js...');
       try {
-        // Desabilitar worker completamente para ambiente servidor
-        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        // Em ambiente servidor, usar workerSrc do CDN ou local
+        const isProduction = process.env.NODE_ENV === 'production';
+
+        if (isProduction) {
+          // Em produção, usar CDN público do pdfjs (versão compatível)
+          pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.2.133/pdf.worker.mjs';
+          console.log(
+            '✅ [PDF] Worker configurado com CDN para produção (v5.2.133)',
+          );
+        } else {
+          // Em desenvolvimento, tentar desabilitar worker
+          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+          console.log('✅ [PDF] Worker desabilitado para desenvolvimento');
+        }
+
+        // Configurações adicionais do worker
         (pdfjsLib.GlobalWorkerOptions as any).workerPort = null;
-        console.log('✅ [PDF] Worker desabilitado para ambiente servidor');
       } catch (workerError) {
         console.log(
           '⚠️ [PDF] Erro ao configurar worker (continuando):',
           (workerError as Error).message,
         );
+
+        // Fallback: tentar configurar com CDN
+        try {
+          pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.2.133/pdf.worker.mjs';
+          console.log(
+            '🔄 [PDF] Fallback: Worker configurado com CDN (v5.2.133)',
+          );
+        } catch (fallbackError) {
+          console.log(
+            '❌ [PDF] Erro no fallback do worker:',
+            (fallbackError as Error).message,
+          );
+        }
       }
 
       // Configuração específica para servidor Node.js
