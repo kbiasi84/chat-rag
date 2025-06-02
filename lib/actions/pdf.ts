@@ -1,8 +1,5 @@
 'use server';
 
-// IMPORTANTE: Este import deve ser o primeiro para garantir que os polyfills sejam carregados
-import '@/lib/polyfills/node-browser-polyfills';
-
 import { SourceType, resources } from '@/lib/db/schema/resources';
 import { nanoid } from '@/lib/utils';
 import { generateEmbeddings } from '@/lib/ai/embedding';
@@ -21,11 +18,8 @@ export async function processPdfFile(
 
     // Declarar variáveis no escopo da função
     let fullText = '';
-    let pageCount = 0;
-    let errorCount = 0;
-    let pdfDocument: any;
     let pdfContent = '';
-    let title = file.name.replace(/\.[^/.]+$/, ''); // fallback default
+    const title = file.name.replace(/\.[^/.]+$/, ''); // fallback default
 
     const arrayBuffer = await file.arrayBuffer();
     console.log(
@@ -33,149 +27,76 @@ export async function processPdfFile(
       arrayBuffer.byteLength,
     );
 
-    // Importação e configuração do pdfjs-dist
+    // Processar PDF com pdf-parse (Node.js nativo)
     try {
-      console.log('🔍 [PDF] Importando pdfjs-dist...');
+      console.log('🔍 [PDF] Carregando pdf-parse...');
+      
+      // Usar require em vez de import dinâmico para evitar problemas
+      const pdfParse = eval('require')('pdf-parse');
+      console.log('✅ [PDF] pdf-parse carregado com sucesso');
+      
+      console.log('🔍 [PDF] Processando PDF com pdf-parse...');
+      
+      // Converter ArrayBuffer para Buffer
+      const buffer = Buffer.from(arrayBuffer);
+      console.log('🔍 [PDF] Buffer criado, iniciando extração...');
 
-      // Importação dinâmica do pdfjs-dist
-      const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-      console.log('✅ [PDF] pdfjs-dist importado com sucesso');
-
-      // Configuração específica para Node.js - configurar worker adequadamente
-      console.log('🔧 [PDF] Configurando worker para ambiente Node.js...');
-      try {
-        // Em ambiente servidor, usar workerSrc do CDN ou local
-        const isProduction = process.env.NODE_ENV === 'production';
-
-        if (isProduction) {
-          // Em produção, usar CDN público do pdfjs (versão compatível)
-          pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.2.133/pdf.worker.mjs';
-          console.log(
-            '✅ [PDF] Worker configurado com CDN para produção (v5.2.133)',
-          );
-        } else {
-          // Em desenvolvimento, tentar desabilitar worker
-          pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-          console.log('✅ [PDF] Worker desabilitado para desenvolvimento');
-        }
-
-        // Configurações adicionais do worker
-        (pdfjsLib.GlobalWorkerOptions as any).workerPort = null;
-      } catch (workerError) {
-        console.log(
-          '⚠️ [PDF] Erro ao configurar worker (continuando):',
-          (workerError as Error).message,
-        );
-
-        // Fallback: tentar configurar com CDN
-        try {
-          pdfjsLib.GlobalWorkerOptions.workerSrc =
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/5.2.133/pdf.worker.mjs';
-          console.log(
-            '🔄 [PDF] Fallback: Worker configurado com CDN (v5.2.133)',
-          );
-        } catch (fallbackError) {
-          console.log(
-            '❌ [PDF] Erro no fallback do worker:',
-            (fallbackError as Error).message,
-          );
-        }
-      }
-
-      // Configuração específica para servidor Node.js
-      const loadingTask = pdfjsLib.getDocument({
-        data: arrayBuffer,
-        verbosity: 0, // Minimizar logs internos
-        useSystemFonts: false, // Desabilitar fontes do sistema
-        disableFontFace: true, // Desabilitar font face
-        isEvalSupported: false, // Desabilitar eval por segurança
-        disableRange: true, // Desabilitar requisições de range
-        disableStream: true, // Desabilitar streaming
-        stopAtErrors: false, // Não parar em erros menores
+      // Extrair texto e metadados do PDF
+      const pdfData = await pdfParse(buffer, {
+        // Opções para otimizar extração
+        max: 0, // Extrair todas as páginas (0 = sem limite)
+        // A biblioteca pdf-parse é mais robusta que pdfjs-dist para Node.js
       });
 
-      console.log('🔍 [PDF] Carregando documento PDF...');
-      pdfDocument = await loadingTask.promise;
-      console.log(
-        '✅ [PDF] PDF carregado com sucesso. Número de páginas:',
-        pdfDocument.numPages,
-      );
+      console.log('✅ [PDF] PDF processado com sucesso!');
+      console.log('🔍 [PDF] Informações extraídas:');
+      console.log('  - Número de páginas:', pdfData.numpages);
+      console.log('  - Total de caracteres extraídos:', pdfData.text.length);
 
-      // Extrair texto de cada página
-      for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-        try {
-          const page = await pdfDocument.getPage(pageNum);
-          const textContent = await page.getTextContent({
-            normalizeWhitespace: true, // Normalizar espaços em branco
-            disableCombineTextItems: false, // Permitir combinar itens de texto
-          });
-
-          // Combinar todos os itens de texto da página
-          const pageText = textContent.items
-            .map((item: any) => item.str)
-            .join(' ');
-
-          if (pageText.trim()) {
-            fullText += `\n\n--- Página ${pageNum} ---\n\n${pageText.trim()}`;
-            pageCount++;
-            console.log(
-              `🔍 [PDF] Página ${pageNum} processada. Caracteres extraídos: ${pageText.trim().length}`,
-            );
-          } else {
-            console.log(`⚠️ [PDF] Página ${pageNum} vazia ou sem texto`);
-          }
-        } catch (pageError) {
-          errorCount++;
-          console.error(
-            `❌ [PDF] Erro ao processar página ${pageNum}:`,
-            pageError,
-          );
-          // Continua com as outras páginas
-        }
+      // Verificar se conseguimos extrair texto
+      if (!pdfData.text || !pdfData.text.trim()) {
+        console.error('❌ [PDF] Nenhum texto foi extraído do PDF');
+        return {
+          success: false,
+          message:
+            'Não foi possível extrair texto do PDF. O arquivo pode conter apenas imagens ou estar protegido.',
+        };
       }
 
-      console.log('🔍 [PDF] Extração de texto concluída:');
-      console.log('  - Páginas processadas:', pageCount);
-      console.log('  - Páginas com erro:', errorCount);
-      console.log('  - Total de caracteres extraídos:', fullText.length);
-    } catch (importError) {
-      console.error(
-        '❌ [PDF] Erro ao importar ou usar pdfjs-dist:',
-        importError,
-      );
-      throw importError;
-    }
+      fullText = pdfData.text.trim();
 
-    // Verificar se conseguimos extrair texto
-    if (!fullText.trim()) {
-      console.error('❌ [PDF] Nenhum texto foi extraído do PDF');
-      return {
-        success: false,
-        message:
-          'Não foi possível extrair texto do PDF. O arquivo pode conter apenas imagens ou estar protegido.',
-      };
-    }
+      // Extrair metadados do PDF se disponíveis
+      let author = 'Não especificado';
+      let creator = 'Não especificado';
+      let pdfTitle = title;
 
-    // Extrair metadados do PDF
-    try {
-      const metadata_info = await pdfDocument.getMetadata();
-      title = (metadata_info.info as any)?.Title || title;
-      const author = (metadata_info.info as any)?.Author || 'Não especificado';
-      const creator =
-        (metadata_info.info as any)?.Creator || 'Não especificado';
+      try {
+        // pdf-parse pode incluir alguns metadados no objeto info
+        if (pdfData.info) {
+          pdfTitle = pdfData.info.Title || title;
+          author = pdfData.info.Author || 'Não especificado';
+          creator = pdfData.info.Creator || 'Não especificado';
 
-      console.log('🔍 [PDF] Metadados extraídos:');
-      console.log('  - Título:', title);
-      console.log('  - Autor:', author);
-      console.log('  - Criador:', creator);
+          console.log('🔍 [PDF] Metadados extraídos:');
+          console.log('  - Título:', pdfTitle);
+          console.log('  - Autor:', author);
+          console.log('  - Criador:', creator);
+        } else {
+          console.log('🔍 [PDF] Nenhum metadado disponível no PDF');
+        }
+      } catch (metadataError) {
+        console.log(
+          '⚠️ [PDF] Erro ao extrair metadados (continuando):',
+          (metadataError as Error).message,
+        );
+      }
 
       // Construir o conteúdo formatado com o texto real extraído
-      pdfContent = `# ${title}\n\n`;
+      pdfContent = `# ${pdfTitle}\n\n`;
       pdfContent += `**Arquivo:** ${file.name}\n`;
       pdfContent += `**Autor:** ${author}\n`;
       pdfContent += `**Criador:** ${creator}\n`;
-      pdfContent += `**Páginas:** ${pdfDocument.numPages}\n`;
+      pdfContent += `**Páginas:** ${pdfData.numpages}\n`;
       pdfContent += `**Caracteres extraídos:** ${fullText.length}\n\n`;
 
       // Adicionar metadados opcionais se fornecidos
@@ -189,37 +110,20 @@ export async function processPdfFile(
       pdfContent += '\n## Conteúdo Extraído\n\n';
 
       // Adicionar o texto real extraído do PDF
-      pdfContent += fullText.trim();
-    } catch (metadataError) {
-      console.error('⚠️ [PDF] Erro ao extrair metadados:', metadataError);
+      pdfContent += fullText;
 
-      // Fallback sem metadados
-      const author = 'Não especificado';
-      const creator = 'Não especificado';
-
-      pdfContent = `# ${title}\n\n`;
-      pdfContent += `**Arquivo:** ${file.name}\n`;
-      pdfContent += `**Autor:** ${author}\n`;
-      pdfContent += `**Criador:** ${creator}\n`;
-      pdfContent += `**Páginas:** ${pdfDocument.numPages}\n`;
-      pdfContent += `**Caracteres extraídos:** ${fullText.length}\n\n`;
-
-      if (metadata?.lei) {
-        pdfContent += `**Lei:** ${metadata.lei}\n`;
-      }
-      if (metadata?.contexto) {
-        pdfContent += `**Contexto:** ${metadata.contexto}\n`;
-      }
-
-      pdfContent += '\n## Conteúdo Extraído\n\n';
-      pdfContent += fullText.trim();
+      console.log(
+        '🔍 [PDF] Conteúdo final preparado. Tamanho total:',
+        pdfContent.length,
+        'caracteres',
+      );
+    } catch (parseError) {
+      console.error(
+        '❌ [PDF] Erro ao processar PDF com pdf-parse:',
+        parseError,
+      );
+      throw parseError;
     }
-
-    console.log(
-      '🔍 [PDF] Conteúdo final preparado. Tamanho total:',
-      pdfContent.length,
-      'caracteres',
-    );
 
     // Gerar um ID único para o arquivo PDF
     const pdfId = `pdf-${nanoid()}`;
@@ -324,7 +228,8 @@ export async function processPdfFile(
           'O PDF está protegido por senha e não pode ser processado.';
       } else if (
         error.message.includes('corrupt') ||
-        error.message.includes('invalid')
+        error.message.includes('invalid') ||
+        error.message.includes('damaged')
       ) {
         errorMessage = 'O arquivo PDF parece estar corrompido ou inválido.';
       } else if (error.message.includes('memory')) {
