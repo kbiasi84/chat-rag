@@ -295,13 +295,13 @@ export async function uploadPdf(formData: FormData) {
       };
     }
 
-    // Verificar tamanho do arquivo (limite de 50MB = 50 * 1024 * 1024 bytes)
-    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    // Verificar tamanho do arquivo (limite de 10MB = 50 * 1024 * 1024 bytes)
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
     if (file.size > MAX_FILE_SIZE) {
       console.error('❌ [UPLOAD] Arquivo muito grande:', file.size, 'bytes');
       return {
         success: false,
-        message: `Arquivo muito grande. O tamanho máximo permitido é 50MB. Seu arquivo tem ${Math.round(file.size / (1024 * 1024))}MB.`,
+        message: `Arquivo muito grande. O tamanho máximo permitido é 10MB. Seu arquivo tem ${Math.round(file.size / (1024 * 1024))}MB.`,
       };
     }
 

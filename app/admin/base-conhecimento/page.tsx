@@ -24,6 +24,7 @@ import {
   countTokens,
   truncateToTokenLimit,
 } from '@/lib/ai/utils/token-counter';
+import { saveCuratedResource } from '@/lib/actions/curador';
 
 // Definindo o tipo para os recursos
 interface Resource {
@@ -52,7 +53,7 @@ const MAX_MANUAL_CHUNK_TOKENS = 800;
 export default function KnowledgeBasePage() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'manual' | 'link' | 'pdf'>(
+  const [activeTab, setActiveTab] = useState<'manual' | 'link' | 'pdf' | 'curador'>(
     'manual',
   );
   const [editingResource, setEditingResource] = useState<Resource | null>(null);
@@ -83,12 +84,23 @@ export default function KnowledgeBasePage() {
   const [linkResources, setLinkResources] = useState<Resource[]>([]);
   const [manualResources, setManualResources] = useState<Resource[]>([]);
   const [pdfResources, setPdfResources] = useState<Resource[]>([]);
+  const [curadorResources, setCuradorResources] = useState<Resource[]>([]);
 
   // Estados para PDF
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfLei, setPdfLei] = useState('');
   const [pdfContexto, setPdfContexto] = useState('');
   const [isSubmittingPdf, setIsSubmittingPdf] = useState(false);
+
+  // Estados para curador de legislação
+  const [curadorLei, setCuradorLei] = useState('');
+  const [curadorContexto, setCuradorContexto] = useState('');
+  const [curadorTextoExtraido, setCuradorTextoExtraido] = useState('');
+  const [curadorChunks, setCuradorChunks] = useState<string[]>([]);
+  const [curadorTokenCount, setCuradorTokenCount] = useState(0);
+  const [isExtractingCurador, setIsExtractingCurador] = useState(false);
+  const [curadorTextSelection, setCuradorTextSelection] = useState<{start: number, end: number}[]>([]);
+  const [showCuradorModal, setShowCuradorModal] = useState(false);
 
   useEffect(() => {
     loadResourcesByType();
@@ -166,9 +178,15 @@ export default function KnowledgeBasePage() {
       resource.sourceId?.startsWith('manual-'),
     );
 
+    // Separar recursos curados (que têm sourceId começando com 'curador-')
+    const curadorData = textData.filter((resource) =>
+      resource.sourceId?.startsWith('curador-'),
+    );
+
     setLinkResources(linkData);
     setManualResources(manualData);
     setPdfResources(pdfData);
+    setCuradorResources(curadorData);
 
     setIsLoading(false);
   };
@@ -479,19 +497,216 @@ export default function KnowledgeBasePage() {
   const handleManualChunkChange = (
     e: React.ChangeEvent<HTMLTextAreaElement>,
   ) => {
-    const newContent = e.target.value;
-    const count = countTokens(newContent);
+    const newValue = e.target.value;
 
-    if (count <= MAX_MANUAL_CHUNK_TOKENS) {
-      setManualChunk(newContent);
-    } else {
-      const truncatedContent = truncateToTokenLimit(
-        newContent,
+    // Verificar se excede o limite de tokens
+    const tokenCount = countTokens(newValue);
+
+    if (tokenCount > MAX_MANUAL_CHUNK_TOKENS) {
+      // Truncar o conteúdo para o limite de tokens
+      const truncatedValue = truncateToTokenLimit(
+        newValue,
         MAX_MANUAL_CHUNK_TOKENS,
       );
-      setManualChunk(truncatedContent);
-      toast.info(`Limite de ${MAX_MANUAL_CHUNK_TOKENS} tokens atingido`);
+      setManualChunk(truncatedValue);
+      // Mostrar um aviso
+      toast.warning('Conteúdo truncado para respeitar o limite de tokens.');
+    } else {
+      setManualChunk(newValue);
     }
+  };
+
+  // Funções para o curador de legislação
+  const handleCuradorExtractText = () => {
+    // Redirecionar para modal manual
+    handleCuradorOpenModal();
+  };
+
+  const handleCuradorUpdateText = (newText: string) => {
+    setCuradorTextoExtraido(newText);
+    setCuradorTokenCount(countTokens(newText));
+    // Resetar chunks quando o texto for modificado
+    setCuradorChunks([]);
+    setCuradorTextSelection([]);
+  };
+
+  // Função leve que só atualiza o HTML sem processamento pesado
+  const handleCuradorHtmlContentChange = (htmlContent: string) => {
+    // Função removida - agora usamos apenas texto simples
+    // setCuradorHtmlEstruturado(htmlContent);
+    // Limpar chunks quando o conteúdo for modificado
+    setCuradorChunks([]);
+  };
+
+  // Função para atualizar contagem de tokens (chamada apenas quando necessário)
+  const updateTokenCount = () => {
+    // Função simplificada - tokens são atualizados automaticamente
+    setCuradorTokenCount(countTokens(curadorTextoExtraido));
+  };
+
+  const insertChunkMarker = () => {
+    const textarea = document.querySelector('textarea[value]') as HTMLTextAreaElement;
+    if (textarea) {
+      const cursorPosition = textarea.selectionStart || 0;
+      const beforeCursor = curadorTextoExtraido.substring(0, cursorPosition);
+      const afterCursor = curadorTextoExtraido.substring(cursorPosition);
+      const newText = beforeCursor + '\n\n---CHUNK---\n\n' + afterCursor;
+      
+      setCuradorTextoExtraido(newText);
+      setCuradorChunks([]); // Limpar chunks
+      
+      // Posicionar o cursor após o marcador
+      setTimeout(() => {
+        const newCursorPosition = cursorPosition + '\n\n---CHUNK---\n\n'.length;
+        textarea.setSelectionRange(newCursorPosition, newCursorPosition);
+        textarea.focus();
+      }, 0);
+    }
+  };
+
+  const removeSelectedContent = () => {
+    const textarea = document.querySelector('textarea[value]') as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart || 0;
+      const end = textarea.selectionEnd || 0;
+      if (start !== end) {
+        const beforeSelection = curadorTextoExtraido.substring(0, start);
+        const afterSelection = curadorTextoExtraido.substring(end);
+        const newText = beforeSelection + afterSelection;
+        setCuradorTextoExtraido(newText);
+        setCuradorChunks([]);
+        
+        // Manter o cursor na posição
+        setTimeout(() => {
+          textarea.setSelectionRange(start, start);
+          textarea.focus();
+        }, 0);
+      }
+    }
+  };
+
+  const handleCuradorMarkChunk = () => {
+    // Atualizar contagem de tokens
+    setCuradorTokenCount(countTokens(curadorTextoExtraido));
+    
+    // Processar o texto para extrair chunks
+    const lines = curadorTextoExtraido.split('\n');
+    const chunks = [];
+    let currentChunk = '';
+    
+    for (const line of lines) {
+      if (line.trim().startsWith('---CHUNK---')) {
+        if (currentChunk.trim()) {
+          chunks.push(currentChunk.trim());
+          currentChunk = '';
+        }
+      } else {
+        currentChunk += line + '\n';
+      }
+    }
+    
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+    
+    setCuradorChunks(chunks);
+  };
+
+  const handleCuradorSaveChunks = async () => {
+    if (curadorChunks.length === 0) {
+      toast.error('Nenhum chunk para salvar.');
+      return;
+    }
+
+    try {
+      // Montar o conteúdo completo do recurso (fonte única)
+      let fullContent = '';
+      
+      if (curadorLei.trim()) {
+        fullContent += `**Lei:** ${curadorLei.trim()}\n\n`;
+      }
+      
+      if (curadorContexto.trim()) {
+        fullContent += `**Contexto:** ${curadorContexto.trim()}\n\n`;
+      }
+      
+      fullContent += curadorTextoExtraido.trim();
+      
+      // Usar a nova função que salva um recurso único com embeddings para cada chunk
+      const result = await saveCuratedResource({
+        chunks: curadorChunks,
+        lei: curadorLei,
+        contexto: curadorContexto,
+        fullContent: fullContent,
+      });
+      
+      if (result.success) {
+        toast.success(result.message);
+        
+        // Resetar formulário
+        setCuradorLei('');
+        setCuradorContexto('');
+        setCuradorTextoExtraido('');
+        setCuradorChunks([]);
+        setCuradorTokenCount(0);
+        setCuradorTextSelection([]);
+        
+        // Recarregar recursos
+        loadResourcesByType();
+      } else {
+        throw new Error(result.message || 'Erro ao salvar o recurso curado');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar recurso curado:', error);
+      toast.error('Erro ao salvar recurso curado');
+    }
+  };
+
+  // Funções para o curador de legislação
+  const handleCuradorOpenModal = () => {
+    // Abrir a modal diretamente para inserção manual do texto
+    setShowCuradorModal(true);
+    
+    if (!curadorTextoExtraido) {
+      toast.success('Cole o texto copiado da página na área de edição.');
+    }
+  };
+
+  // Função para calcular tokens do último chunk
+  const getLastChunkTokens = () => {
+    if (!curadorTextoExtraido.trim()) return 0;
+    
+    const text = curadorTextoExtraido;
+    const chunkMarker = '---CHUNK---';
+    
+    // Encontrar todas as posições dos marcadores
+    const chunkPositions = [];
+    let pos = text.indexOf(chunkMarker);
+    while (pos !== -1) {
+      chunkPositions.push(pos);
+      pos = text.indexOf(chunkMarker, pos + 1);
+    }
+    
+    let chunkToCount;
+    
+    if (chunkPositions.length === 0) {
+      // Sem marcadores: conta todo o texto
+      chunkToCount = text;
+    } else if (chunkPositions.length === 1) {
+      // Um marcador: conta o texto antes do marcador
+      chunkToCount = text.substring(0, chunkPositions[0]);
+    } else {
+      // Múltiplos marcadores: conta o texto entre o penúltimo e último marcador
+      const penultimoIndex = chunkPositions[chunkPositions.length - 2];
+      const ultimoIndex = chunkPositions[chunkPositions.length - 1];
+      const startIndex = penultimoIndex + chunkMarker.length;
+      chunkToCount = text.substring(startIndex, ultimoIndex);
+    }
+    
+    // Remover linhas vazias do início e do final
+    chunkToCount = chunkToCount.trim();
+    
+    return countTokens(chunkToCount);
   };
 
   return (
@@ -536,6 +751,17 @@ export default function KnowledgeBasePage() {
               onClick={() => setActiveTab('pdf')}
             >
               PDF
+            </button>
+            <button
+              type="button"
+              className={`px-4 py-2 font-medium ${
+                activeTab === 'curador'
+                  ? 'border-b-2 border-blue-500 text-blue-500'
+                  : 'text-neutral-500 dark:text-neutral-400'
+              }`}
+              onClick={() => setActiveTab('curador')}
+            >
+              Curador de Legislação
             </button>
           </div>
 
@@ -866,7 +1092,7 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                   : 'Adicionar Link e Extrair Conteúdo'}
               </Button>
             </form>
-          ) : (
+          ) : activeTab === 'pdf' ? (
             <form onSubmit={handlePdfSubmit} className="space-y-6">
               {/* Layout em duas colunas */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -940,7 +1166,7 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                       className="flex-1"
                     />
                     <p className="text-xs text-gray-500 dark:text-neutral-400 mt-2">
-                      Selecione um arquivo PDF (tamanho máximo: 50MB). O arquivo
+                      Selecione um arquivo PDF (tamanho máximo: 10MB). O arquivo
                       será processado e dividido em chunks para busca semântica.
                     </p>
                   </div>
@@ -956,8 +1182,368 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                 </Button>
               </div>
             </form>
-          )}
+          ) : activeTab === 'curador' ? (
+            <div className="space-y-6">
+              {/* Curador de Legislação */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Coluna 1: Configurações */}
+                <div className="space-y-4">
+                  <h3 className="text-md font-medium text-neutral-700 dark:text-neutral-300 border-b pb-2">
+                    📋 Metadados
+                  </h3>
+
+                  <div>
+                    <label
+                      htmlFor="curador-lei"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Lei/Norma
+                    </label>
+                    <Textarea
+                      id="curador-lei"
+                      value={curadorLei}
+                      onChange={(e) => setCuradorLei(e.target.value)}
+                      rows={2}
+                      placeholder="Ex: Lei 8.213/91 - Planos de Benefícios da Previdência Social"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="curador-contexto"
+                      className="block text-sm font-medium mb-2 dark:text-neutral-200"
+                    >
+                      Contexto
+                    </label>
+                    <Textarea
+                      id="curador-contexto"
+                      value={curadorContexto}
+                      onChange={(e) => setCuradorContexto(e.target.value)}
+                      rows={3}
+                      placeholder="Contexto jurídico, aplicabilidade, relacionamento com outras normas..."
+                    />
+                  </div>
+
+                  <Button
+                    onClick={handleCuradorExtractText}
+                    className="w-full"
+                  >
+                    📝 Iniciar Edição de Texto
+                  </Button>
+
+                  {curadorTextoExtraido && (
+                    <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                      <p className="text-xs text-green-700 dark:text-green-300 font-medium">
+                        ✅ Texto curado: {curadorTokenCount.toLocaleString()} tokens
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        Edite o texto na modal e marque os chunks manualmente
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Coluna 2: Preview/Status */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <h3 className="text-md font-medium text-neutral-700 dark:text-neutral-300">
+                      📄 Preview do Conteúdo
+                    </h3>
+                    <div className="flex items-center space-x-2">
+                      {curadorTextoExtraido && (
+                        <span className="text-xs text-blue-600 dark:text-blue-400">
+                          {curadorTokenCount.toLocaleString()} tokens total
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {!curadorTextoExtraido ? (
+                    <div className="text-center py-12 text-gray-500 dark:text-neutral-400">
+                      <p className="text-sm">📄 Nenhum texto curado ainda</p>
+                      <p className="text-xs mt-1">Clique em &quot;Iniciar Edição de Texto&quot; para começar</p>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 dark:bg-neutral-800 rounded-lg p-4 max-h-80 overflow-y-scroll">
+                      <pre className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap font-mono">
+                        {curadorTextoExtraido.length > 1000 
+                          ? `${curadorTextoExtraido.substring(0, 1000)}...` 
+                          : curadorTextoExtraido}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
+                {/* Coluna 3: Chunks Criados */}
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center border-b pb-2">
+                    <h3 className="text-md font-medium text-neutral-700 dark:text-neutral-300">
+                      📦 Chunks Criados
+                    </h3>
+                    {curadorChunks.length > 0 && (
+                      <span className="text-xs text-green-600 dark:text-green-400">
+                        {curadorChunks.length} chunks
+                      </span>
+                    )}
+                  </div>
+
+                  {curadorChunks.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 dark:text-neutral-400">
+                      <p className="text-sm">📋 Nenhum chunk criado ainda</p>
+                      <p className="text-xs mt-1">Processe o texto para visualizar os chunks</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {curadorChunks.map((chunk, index) => {
+                        const chunkTokens = countTokens(chunk);
+                        return (
+                          <div key={index} className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 bg-gray-50 dark:bg-neutral-800">
+                            <div className="flex justify-between items-start mb-2">
+                              <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                                Chunk {index + 1}
+                              </h4>
+                              <div className="flex space-x-2">
+                                <span className={`text-xs px-2 py-1 rounded ${chunkTokens > 800 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : chunkTokens > 720 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>
+                                  {chunkTokens} tokens
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    const newChunks = curadorChunks.filter((_, i) => i !== index);
+                                    setCuradorChunks(newChunks);
+                                  }}
+                                  className="h-6 w-6 p-0 text-xs"
+                                >
+                                  ×
+                                </Button>
+                              </div>
+                            </div>
+                            <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-4">
+                              {chunk.length > 150 ? `${chunk.substring(0, 150)}...` : chunk}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {curadorChunks.length > 0 && (
+                    <div className="space-y-3 pt-3 border-t">
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+                        <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">
+                          📊 Resumo
+                        </p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          {curadorChunks.length} chunks • {curadorChunks.reduce((total, chunk) => total + countTokens(chunk), 0).toLocaleString()} tokens total
+                        </p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">
+                          Média: {Math.round(curadorChunks.reduce((total, chunk) => total + countTokens(chunk), 0) / curadorChunks.length)} tokens/chunk
+                        </p>
+                      </div>
+
+                      <Button
+                        onClick={handleCuradorSaveChunks}
+                        disabled={curadorChunks.length === 0}
+                        className="w-full"
+                      >
+                        💾 Salvar {curadorChunks.length} Chunks
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
+
+        {/* Modal em Tela Cheia para Edição de Texto */}
+        {showCuradorModal && (
+          <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-neutral-900">
+            {/* Header da Modal */}
+            <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800">
+              <div className="flex items-center space-x-4">
+                <h2 className="text-xl font-semibold dark:text-white">
+                  📝 Curador de Legislação - Editor em Tela Cheia
+                </h2>
+                <div className="flex items-center space-x-2 text-sm text-neutral-600 dark:text-neutral-400">
+                  <span>📊 {curadorTokenCount.toLocaleString()} tokens</span>
+                  {curadorChunks.length > 0 && (
+                    <span>• 📦 {curadorChunks.length} chunks</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  onClick={handleCuradorMarkChunk}
+                  disabled={!curadorTextoExtraido.trim()}
+                  variant="outline"
+                  size="sm"
+                >
+                  🔄 Processar Chunks
+                </Button>
+                <Button
+                  onClick={handleCuradorSaveChunks}
+                  disabled={curadorChunks.length === 0}
+                  size="sm"
+                >
+                  💾 Salvar {curadorChunks.length} Chunks
+                </Button>
+                <Button
+                  onClick={() => setShowCuradorModal(false)}
+                  variant="outline"
+                  size="sm"
+                >
+                  ✕ Fechar
+                </Button>
+              </div>
+            </div>
+
+            {/* Conteúdo da Modal */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Painel Principal - Visualização Estruturada */}
+              <div className="flex-1 flex flex-col p-6 overflow-hidden min-w-0">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium dark:text-white">
+                    Visualização
+                  </h3>
+                  <div className="flex items-center space-x-4 text-sm text-neutral-600 dark:text-neutral-400">
+                    <span><strong>Lei:</strong> {curadorLei || 'Não informada'}</span>
+                    {curadorTextoExtraido && (
+                      <span className={`font-medium ${(() => {
+                        const lastChunkTokens = getLastChunkTokens();
+                        if (lastChunkTokens > MAX_MANUAL_CHUNK_TOKENS) return 'text-red-600';
+                        if (lastChunkTokens > MAX_MANUAL_CHUNK_TOKENS * 0.9) return 'text-orange-600';
+                        return 'text-green-600';
+                      })()}`}>
+                        <strong>Último chunk:</strong> {getLastChunkTokens()}/{MAX_MANUAL_CHUNK_TOKENS} tokens
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 flex flex-col">
+                  {/* Toolbar para edição estruturada */}
+                  <div className="flex items-center justify-between mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="text-xs text-blue-700 dark:text-blue-300">
+                      💡 <strong>Instruções:</strong> Edite o texto livremente. Para dividir em chunks, digite <strong>---CHUNK---</strong> em linha separada e clique em &quot;Processar Chunks&quot;.
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText('---CHUNK---');
+                        toast.success('---CHUNK--- copiado!');
+                      }}
+                      className="ml-2 text-xs"
+                    >
+                      📋 Copiar ---CHUNK---
+                    </Button>
+                  </div>
+
+                  {/* Área editável simples - Textarea */}
+                  <textarea
+                    className="flex-1 w-full h-full border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 bg-white dark:bg-neutral-900 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono text-sm leading-relaxed"
+                    value={curadorTextoExtraido}
+                    onChange={(e) => {
+                      setCuradorTextoExtraido(e.target.value);
+                      setCuradorChunks([]); // Limpar chunks quando editar
+                    }}
+                    placeholder="O texto extraído aparecerá aqui. Você pode editar livremente, adicionar conteúdo, e inserir marcadores ---CHUNK--- onde quiser dividir o texto."
+                  />
+                </div>
+              </div>
+
+              {/* Painel Lateral - Chunks */}
+              <div className="w-80 border-l border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 p-4 overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium dark:text-white">
+                    📦 Chunks Criados
+                  </h3>
+                  {curadorChunks.length > 0 && (
+                    <span className="text-sm text-green-600 dark:text-green-400">
+                      {curadorChunks.length} chunks
+                    </span>
+                  )}
+                </div>
+
+                {curadorChunks.length === 0 ? (
+                  <div className="flex-1 flex items-center justify-center text-center text-gray-500 dark:text-neutral-400">
+                    <div>
+                      <p className="text-sm mb-2">📋 Nenhum chunk criado ainda</p>
+                      <p className="text-xs">Adicione marcadores ---CHUNK--- no texto e clique em &quot;Processar Chunks&quot;</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto space-y-3">
+                    {curadorChunks.map((chunk, index) => {
+                      const chunkTokens = countTokens(chunk);
+                      return (
+                        <div key={index} className="border border-neutral-200 dark:border-neutral-600 rounded-lg p-3 bg-white dark:bg-neutral-700">
+                          <div className="flex justify-between items-start mb-2">
+                            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                              Chunk {index + 1}
+                            </h4>
+                            <div className="flex space-x-2">
+                              <span className={`text-xs px-2 py-1 rounded ${chunkTokens > 800 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' : chunkTokens > 720 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' : 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'}`}>
+                                {chunkTokens} tokens
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  const newChunks = curadorChunks.filter((_, i) => i !== index);
+                                  setCuradorChunks(newChunks);
+                                }}
+                                className="h-6 w-6 p-0 text-xs"
+                              >
+                                ×
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="text-xs text-gray-600 dark:text-gray-300 max-h-32 overflow-y-auto">
+                            <pre className="whitespace-pre-wrap font-mono">
+                              {chunk.length > 200 ? `${chunk.substring(0, 200)}...` : chunk}
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {curadorChunks.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-600">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg mb-4">
+                      <p className="text-xs text-blue-700 dark:text-blue-300 font-medium mb-1">
+                        📊 Resumo da Curadoria
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        • {curadorChunks.length} chunks criados
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        • {curadorChunks.reduce((total, chunk) => total + countTokens(chunk), 0).toLocaleString()} tokens total
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        • Média: {Math.round(curadorChunks.reduce((total, chunk) => total + countTokens(chunk), 0) / curadorChunks.length)} tokens/chunk
+                      </p>
+                    </div>
+
+                    <Button
+                      onClick={() => {
+                        handleCuradorSaveChunks();
+                        setShowCuradorModal(false);
+                      }}
+                      className="w-full"
+                    >
+                      💾 Salvar e Fechar ({curadorChunks.length} chunks)
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Seção de links monitorados */}
         {activeTab === 'link' && (
@@ -1119,6 +1705,29 @@ b) ao uso dos equipamentos de proteção individual fornecidos pela empresa.`}
                   )}
                 </>
               )}
+
+              {activeTab === 'curador' && (
+                <>
+                  <h3 className="text-md font-medium mb-3 dark:text-neutral-300">
+                    Chunks Curados de Legislação
+                  </h3>
+                  {curadorResources.length === 0 ? (
+                    <p className="text-center py-6 text-neutral-500 dark:text-neutral-400">
+                      Nenhum chunk curado adicionado.
+                    </p>
+                  ) : (
+                    <div className="space-y-4 mb-8">
+                      {curadorResources.map((resource) => (
+                        <ResourceItem
+                          key={resource.id}
+                          resource={resource}
+                          onDelete={handleDelete}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>
@@ -1143,8 +1752,11 @@ const ResourceItem = ({
   // Verificar se é um chunk manual
   const isManualChunk = resource.sourceId?.startsWith('manual-');
 
-  // Extrair metadados do chunk manual
-  const extractManualMetadata = (content: string) => {
+  // Verificar se é um chunk curado
+  const isCuratedChunk = resource.sourceId?.startsWith('curador-');
+
+  // Extrair metadados do chunk curado
+  const extractCuratedMetadata = (content: string) => {
     const lines = content.split('\n');
     const metadata: { [key: string]: string } = {};
     let contentStart = 0;
@@ -1156,7 +1768,7 @@ const ResourceItem = ({
     }
 
     // Extrair outros metadados
-    const contentLines = [];
+    const contentLines: string[] = [];
     let foundContent = false;
 
     for (let i = contentStart; i < lines.length; i++) {
@@ -1164,14 +1776,14 @@ const ResourceItem = ({
 
       if (line.startsWith('**Lei:**')) {
         metadata.law = line.replace('**Lei:**', '').trim();
-      } else if (line.startsWith('**Hierarquia:**')) {
-        metadata.hierarchy = line.replace('**Hierarquia:**', '').trim();
       } else if (line.startsWith('**Contexto:**')) {
         metadata.context = line.replace('**Contexto:**', '').trim();
-      } else if (line.startsWith('**Categoria:**')) {
-        metadata.category = line.replace('**Categoria:**', '').trim();
-      } else if (line.startsWith('**Tags:**')) {
-        metadata.tags = line.replace('**Tags:**', '').trim();
+      } else if (line.startsWith('**Fonte:**')) {
+        metadata.source = line.replace('**Fonte:**', '').trim();
+      } else if (line.startsWith('**Tipo:**')) {
+        metadata.type = line.replace('**Tipo:**', '').trim();
+      } else if (line.startsWith('**Sessão:**')) {
+        metadata.session = line.replace('**Sessão:**', '').trim();
       } else {
         // Se não é um metadado, é conteúdo principal
         // Mas só adiciona se não for uma linha vazia no início
@@ -1195,77 +1807,30 @@ const ResourceItem = ({
     return metadata;
   };
 
-  const manualMetadata = isManualChunk
-    ? extractManualMetadata(resource.content)
+  const curatedMetadata = isCuratedChunk
+    ? extractCuratedMetadata(resource.content)
     : null;
 
   return (
     <div className="border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
       <div className="flex justify-between">
         <div className="flex-1">
-          {isManualChunk && manualMetadata ? (
+          {isManualChunk && (
             // Layout especial para chunks manuais
             <div className="space-y-2">
               <h4 className="font-semibold text-base dark:text-white">
-                {manualMetadata.title || 'Chunk Manual'}
+                {resource.content.split('\n')[0].replace(/^#\s+/, '') ||
+                  'Chunk Manual'}
               </h4>
 
-              {manualMetadata.law && (
-                <div className="text-xs">
-                  <span className="font-medium text-blue-600 dark:text-blue-400">
-                    Lei:
-                  </span>
-                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
-                    {manualMetadata.law}
-                  </span>
-                </div>
-              )}
-
-              {manualMetadata.hierarchy && (
-                <div className="text-xs">
-                  <span className="font-medium text-blue-600 dark:text-blue-400">
-                    Hierarquia:
-                  </span>
-                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
-                    {manualMetadata.hierarchy}
-                  </span>
-                </div>
-              )}
-
-              {manualMetadata.context && (
-                <div className="text-xs">
-                  <span className="font-medium text-green-600 dark:text-green-400">
-                    Contexto:
-                  </span>
-                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
-                    {manualMetadata.context}
-                  </span>
-                </div>
-              )}
-
               <p className="text-sm dark:text-neutral-300 mt-2">
-                {manualMetadata.content && manualMetadata.content.length > 150
-                  ? `${manualMetadata.content.substring(0, 150)}...`
-                  : manualMetadata.content}
+                {resource.content.length > 150
+                  ? `${resource.content.substring(0, 150)}...`
+                  : resource.content}
               </p>
-
-              <div className="flex flex-wrap gap-2 mt-2">
-                {manualMetadata.category && (
-                  <span className="inline-block bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs px-2 py-1 rounded">
-                    {manualMetadata.category}
-                  </span>
-                )}
-                {manualMetadata.tags?.split(',').map((tag, idx) => (
-                  <span
-                    key={`tag-${resource.id}-${tag.trim()}`}
-                    className="inline-block bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs px-2 py-1 rounded"
-                  >
-                    {tag.trim()}
-                  </span>
-                ))}
-              </div>
             </div>
-          ) : resource.sourceType === 'LINK' ? (
+          )}
+          {resource.sourceType === 'LINK' ? (
             // Layout para Links
             <div className="space-y-2">
               <h4 className="font-medium text-base mb-1 dark:text-white">
@@ -1282,6 +1847,72 @@ const ResourceItem = ({
               <span className="inline-block bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 text-xs px-2 py-1 rounded">
                 Link
               </span>
+            </div>
+          ) : isCuratedChunk && curatedMetadata ? (
+            // Layout especial para chunks curados
+            <div className="space-y-2">
+              <h4 className="font-semibold text-base dark:text-white">
+                {curatedMetadata.title || 'Chunk Curado'}
+              </h4>
+
+              {curatedMetadata.law && (
+                <div className="text-xs">
+                  <span className="font-medium text-purple-600 dark:text-purple-400">
+                    Lei:
+                  </span>
+                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
+                    {curatedMetadata.law}
+                  </span>
+                </div>
+              )}
+
+              {curatedMetadata.context && (
+                <div className="text-xs">
+                  <span className="font-medium text-green-600 dark:text-green-400">
+                    Contexto:
+                  </span>
+                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
+                    {curatedMetadata.context}
+                  </span>
+                </div>
+              )}
+
+              {curatedMetadata.source && (
+                <div className="text-xs">
+                  <span className="font-medium text-blue-600 dark:text-blue-400">
+                    Fonte:
+                  </span>
+                  <span className="ml-1 text-neutral-600 dark:text-neutral-300">
+                    <a 
+                      href={curatedMetadata.source} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="hover:underline"
+                    >
+                      {curatedMetadata.source.length > 50 
+                        ? `${curatedMetadata.source.substring(0, 50)}...` 
+                        : curatedMetadata.source}
+                    </a>
+                  </span>
+                </div>
+              )}
+
+              <p className="text-sm dark:text-neutral-300 mt-2">
+                {curatedMetadata.content && curatedMetadata.content.length > 150
+                  ? `${curatedMetadata.content.substring(0, 150)}...`
+                  : curatedMetadata.content}
+              </p>
+
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="inline-block bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 text-xs px-2 py-1 rounded">
+                  🔍 Curado
+                </span>
+                {curatedMetadata.session && (
+                  <span className="inline-block bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-xs px-2 py-1 rounded">
+                    {curatedMetadata.session.replace('curador-', 'Sessão-')}
+                  </span>
+                )}
+              </div>
             </div>
           ) : resource.sourceType === 'PDF' ? (
             // Layout para PDFs

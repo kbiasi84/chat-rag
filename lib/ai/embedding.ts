@@ -6,6 +6,7 @@ import { db } from '../db';
 import { filterLowQualityContent } from './utils/content-quality';
 import { countTokens } from './utils/token-counter';
 import { SourceType } from '../db/schema/resources';
+import { regularPrompt } from './prompts';
 
 // Atualizar para modelo mais recente de embeddings
 const embeddingModel = openai.embedding('text-embedding-3-small');
@@ -551,10 +552,21 @@ export const findRelevantContent = async (userQuery: string) => {
         similarContent,
         minQualityScore,
       );
+
       // Implementar seleção pura por meritocracia (similaridade + qualidade)
       const processedResults = [];
       let totalTokens = 0;
-      const MAX_TOTAL_TOKENS = 2500;
+      
+      // Calcular espaço disponível dinamicamente considerando o prompt do sistema
+      const systemPromptTokens = countTokens(regularPrompt, 'gpt-4o');
+      
+      // Limite total do contexto (conservador para deixar margem para conversa)
+      const TOTAL_CONTEXT_WINDOW = 4000;
+      // Margem de segurança para mensagens da conversa e outros metadados
+      const SAFETY_MARGIN = 300;
+      
+      // Calcular tokens disponíveis para contexto da base de conhecimento
+      const MAX_CONTEXT_TOKENS = TOTAL_CONTEXT_WINDOW - systemPromptTokens - SAFETY_MARGIN;
 
       // Estatísticas para monitoramento
       const resourceCount = new Map();
@@ -565,7 +577,7 @@ export const findRelevantContent = async (userQuery: string) => {
         const fragmentTokens = countTokens(item.content, 'gpt-4o');
 
         // Verificar limite de tokens
-        if (totalTokens + fragmentTokens > MAX_TOTAL_TOKENS) {
+        if (totalTokens + fragmentTokens > MAX_CONTEXT_TOKENS) {
           break;
         }
 
@@ -590,11 +602,15 @@ export const findRelevantContent = async (userQuery: string) => {
         }
       }
 
-      // Log simplificado para produção
-      console.log('📊 Retrieval:', {
+      // Log detalhado para produção incluindo informações do prompt
+      console.log('📊 Retrieval Dinâmico:', {
+        promptTokens: systemPromptTokens,
+        contextTokensUsed: totalTokens,
+        contextTokensAvailable: MAX_CONTEXT_TOKENS,
+        totalBudget: TOTAL_CONTEXT_WINDOW,
+        safetyMargin: SAFETY_MARGIN,
         chunks: processedResults.length,
-        tokens: totalTokens,
-        fontes: resourceCount.size,
+        fontes: resourceCount.size
       });
 
       return processedResults;
