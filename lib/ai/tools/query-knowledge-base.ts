@@ -42,27 +42,11 @@ export const getKnowledgeInfo = tool({
     'Consultar a base de conhecimento para encontrar informações relevantes sobre a pergunta do usuário.',
   parameters: z.object({
     question: z.string().describe('A pergunta do usuário'),
-    keywords: z
-      .array(z.string())
-      .optional()
-      .describe('Palavras-chave adicionais para melhorar a busca'),
   }),
-  execute: async ({ question, keywords = [] }) => {
+  execute: async ({ question }) => {
     try {
       const directResults = await findRelevantContent(question);
-      let keywordResults: any[] = [];
-      if (keywords.length > 0) {
-        try {
-          keywordResults = await Promise.all(
-            keywords.map(async (keyword) => {
-              return await findRelevantContent(keyword);
-            }),
-          );
-        } catch (keywordError) {
-          console.error('Erro na busca por palavras-chave:', keywordError);
-        }
-      }
-      const allResults = [...directResults, ...keywordResults.flat()];
+      const allResults = [...directResults];
       const uniqueContents = new Map();
       allResults.forEach((item) => {
         if (item?.content) {

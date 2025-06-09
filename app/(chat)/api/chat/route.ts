@@ -25,11 +25,7 @@ import {
   getTrailingMessageId,
 } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
-import {
-  getKnowledgeInfo,
-  analyzeQuery,
-  addToKnowledgeBase,
-} from '@/lib/ai/tools/query-knowledge-base';
+import { getKnowledgeInfo } from '@/lib/ai/tools/query-knowledge-base';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import {
@@ -132,34 +128,67 @@ export async function POST(request: Request) {
         const prompt = systemPrompt();
 
         const fallbackOrder = [
-          { key: 'chat-dp', name: 'gpt-4o' },
+          { key: 'chat-dp', name: 'o4-mini' },
           { key: 'gpt-4.1-mini', name: 'gpt-4.1-mini' },
-          { key: 'gpt-4.1-nano', name: 'gpt-4.1-nano' },
         ];
 
         const doStreamCascade = async (options: any) => {
           let lastError = null;
+          console.log(
+            '🔄 [FALLBACK] Iniciando cascade de modelos:',
+            fallbackOrder.map((m) => m.name),
+          );
+
           for (const model of fallbackOrder) {
             try {
+              console.log(
+                `🤖 [FALLBACK] Tentando modelo: ${model.name} (${model.key})`,
+              );
+
               if (model.key === 'chat-dp') {
-                return await myProvider
+                const result = await myProvider
                   .languageModel('chat-dp')
                   .doStream(options);
+                console.log(`✅ [FALLBACK] Sucesso com modelo: ${model.name}`);
+                return result;
               } else {
                 const { openai } = await import('@ai-sdk/openai');
-                return await openai(model.name).doStream(options);
+                const result = await openai(model.name).doStream(options);
+                console.log(`✅ [FALLBACK] Sucesso com modelo: ${model.name}`);
+                return result;
               }
             } catch (err: any) {
+              console.error(`❌ [FALLBACK] Erro no modelo ${model.name}:`, {
+                message: err?.message,
+                status: err?.status,
+                code: err?.code,
+                type: err?.type,
+                stack: err?.stack?.split('\n')[0],
+              });
+
               lastError = err;
-              if (err?.message?.toLowerCase().includes('rate limit')) {
+              if (
+                err?.message?.toLowerCase().includes('rate limit') ||
+                err?.message?.toLowerCase().includes('quota exceeded') ||
+                err?.message?.toLowerCase().includes('too many requests') ||
+                err?.status === 429 ||
+                err?.status === 503
+              ) {
+                console.log(
+                  `🔄 [FALLBACK] Rate limit detectado em ${model.name}, tentando próximo modelo...`,
+                );
                 continue;
               } else {
+                console.error(
+                  `🚨 [FALLBACK] Erro não relacionado a rate limit em ${model.name}, interrompendo cascade`,
+                );
                 throw err;
               }
             }
           }
           console.error(
-            '[FALLBACK][STREAM] Todos os modelos estão em alta demanda.',
+            '🚨 [FALLBACK][STREAM] Todos os modelos falharam. Último erro:',
+            lastError,
           );
           throw new Error(
             'Todos os modelos estão em alta demanda. Por favor, aguarde alguns minutos e tente novamente.',
@@ -171,25 +200,31 @@ export async function POST(request: Request) {
           doStream: doStreamCascade,
         };
 
+        // Enviar apenas a mensagem atual do usuário, sem histórico
+        const userContent = extractTextFromParts(userMessage.parts || []);
+        const currentMessages = [
+          {
+            role: 'user' as const,
+            content: userContent,
+          },
+        ];
+
+        console.log('📝 [CHAT] Pergunta do usuário:', userContent);
+        console.log('💭 [CHAT] Iniciando streamText com modelo principal...');
+
         const result = streamText({
           model: originalModel,
           system: prompt,
-          messages,
-          maxSteps: 5,
-          experimental_activeTools: [
-            'analyzeQuery',
-            'getKnowledgeInfo',
-            'addToKnowledgeBase',
-          ],
+          messages: currentMessages,
+          maxSteps: 2,
+          experimental_activeTools: ['getKnowledgeInfo'],
           experimental_transform: smoothStream({
             chunking: 'word',
             delayInMs: 15,
           }),
           experimental_generateMessageId: generateUUID,
           tools: {
-            analyzeQuery,
             getKnowledgeInfo,
-            addToKnowledgeBase,
           },
           onFinish: async ({ response }) => {
             if (session.user?.id) {
@@ -295,12 +330,25 @@ export async function POST(request: Request) {
         result.mergeIntoDataStream(dataStream);
       },
       onError: (error: unknown) => {
+        console.error('🚨 [STREAM] Erro durante o streaming:', {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : 'N/A',
+          type: typeof error,
+          timestamp: new Date().toISOString(),
+        });
         return 'Oops, an error occured!';
       },
     });
   } catch (error) {
+    console.error('🚨 [CHAT] Erro geral no processamento:', {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : 'N/A',
+      type: typeof error,
+      timestamp: new Date().toISOString(),
+    });
+
     return new Response('An error occurred while processing your request!', {
-      status: 404,
+      status: 500,
     });
   }
 }

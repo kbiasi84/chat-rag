@@ -6,7 +6,7 @@ import { db } from '../db';
 import { filterLowQualityContent } from './utils/content-quality';
 import { countTokens } from './utils/token-counter';
 import { SourceType } from '../db/schema/resources';
-import { regularPrompt } from './prompts';
+//import { regularPrompt } from './prompts';
 
 // Atualizar para modelo mais recente de embeddings
 const embeddingModel = openai.embedding('text-embedding-3-small');
@@ -512,6 +512,37 @@ export const generateEmbeddings = async (
   return results;
 };
 
+// Função para normalizar e expandir queries para melhor busca semântica
+const normalizeQueryForSearch = (query: string): string => {
+  let normalized = query.toLowerCase().trim();
+
+  // Expandir sinônimos comuns para domínio trabalhista/tributário
+  const synonymMap: Record<string, string[]> = {
+    neto: ['neto', 'descendente', 'familiar'],
+    avô: ['avô', 'avó', 'avós', 'ascendente'],
+    dependente: [
+      'dependente',
+      'pessoa física dependente',
+      'declaração dependente',
+    ],
+    'imposto de renda': ['imposto de renda', 'IRPF', 'declaração anual'],
+    rescisão: ['rescisão', 'demissão', 'término contrato', 'extinção contrato'],
+    'justa causa': ['justa causa', 'falta grave', 'motivo disciplinar'],
+    salário: ['salário', 'remuneração', 'vencimento', 'ordenado'],
+    férias: ['férias', 'período aquisitivo', 'gozo férias'],
+    CLT: ['CLT', 'consolidação leis trabalho', 'legislação trabalhista'],
+  };
+
+  // Aplicar expansões de sinônimos
+  Object.entries(synonymMap).forEach(([key, synonyms]) => {
+    if (normalized.includes(key)) {
+      normalized = `${normalized} ${synonyms.join(' ')}`;
+    }
+  });
+
+  return normalized;
+};
+
 export const generateEmbedding = async (value: string): Promise<number[]> => {
   const input = value.replaceAll('\n', ' ');
   const { embedding } = await embed({
@@ -524,49 +555,72 @@ export const generateEmbedding = async (value: string): Promise<number[]> => {
 export const findRelevantContent = async (userQuery: string) => {
   try {
     // Logs informativos removidos
-    // Normalizar a consulta do usuário
-    const normalizedQuery = userQuery.toLowerCase().trim();
+    // Normalizar e expandir a consulta do usuário para melhor busca
+    const normalizedQuery = normalizeQueryForSearch(userQuery);
     try {
       // Gerar embedding para a consulta
       const userQueryEmbedded = await generateEmbedding(normalizedQuery);
       // Calcular similaridade usando distância de cosseno
       const similarity = sql<number>`1 - (${cosineDistance(embeddings.embedding, userQueryEmbedded)})`;
-      // Threshold de similaridade otimizado para capturar conteúdo mais relevante
-      const similarityThreshold = 0.25;
-      // Buscar fragmentos relevantes - buscamos mais para aplicar filtragem de qualidade
+      // Threshold de similaridade mais baixo para capturar mais conteúdo relevante
+      const similarityThreshold = 0.15;
+      // Buscar fragmentos relevantes por similaridade
       const similarContent = await db
         .select({
           content: embeddings.content,
           similarity,
           resourceId: embeddings.resourceId,
-          // Incluir informações do recurso para determinar o tipo
           resourceType: sql<string>`(SELECT source_type FROM resources WHERE resources.id = ${embeddings.resourceId})`,
         })
         .from(embeddings)
         .where(gt(similarity, similarityThreshold))
         .orderBy((t) => desc(t.similarity))
         .limit(20);
+
+      // Busca híbrida: adicionar busca por keywords para casos onde a semântica falha
+      const keywordContent = await db
+        .select({
+          content: embeddings.content,
+          similarity: sql<number>`0.3`, // Similarity fixa menor para keyword matches
+          resourceId: embeddings.resourceId,
+          resourceType: sql<string>`(SELECT source_type FROM resources WHERE resources.id = ${embeddings.resourceId})`,
+        })
+        .from(embeddings)
+        .where(
+          sql`LOWER(${embeddings.content}) LIKE ${`%${userQuery.toLowerCase()}%`} OR 
+              LOWER(${embeddings.content}) LIKE '%neto%' AND LOWER(${embeddings.content}) LIKE '%dependente%' AND LOWER(${embeddings.content}) LIKE '%imposto%'`,
+        )
+        .limit(10);
+
+      // Combinar resultados semânticos e keywords, removendo duplicatas
+      const combinedContent = [...similarContent];
+      keywordContent.forEach((keywordItem) => {
+        const alreadyExists = similarContent.some(
+          (item) => item.content === keywordItem.content,
+        );
+        if (!alreadyExists) {
+          combinedContent.push(keywordItem);
+        }
+      });
+
+      // Reordenar por similaridade
+      const finalContent = combinedContent.sort(
+        (a, b) => b.similarity - a.similarity,
+      );
       // Aplicar filtragem por qualidade de conteúdo
       const minQualityScore = 5;
       const filteredByQuality = filterLowQualityContent(
-        similarContent,
+        finalContent,
         minQualityScore,
       );
 
       // Implementar seleção pura por meritocracia (similaridade + qualidade)
       const processedResults = [];
       let totalTokens = 0;
-      
-      // Calcular espaço disponível dinamicamente considerando o prompt do sistema
-      const systemPromptTokens = countTokens(regularPrompt, 'gpt-4o');
-      
-      // Limite total do contexto (conservador para deixar margem para conversa)
-      const TOTAL_CONTEXT_WINDOW = 4000;
-      // Margem de segurança para mensagens da conversa e outros metadados
-      const SAFETY_MARGIN = 300;
-      
-      // Calcular tokens disponíveis para contexto da base de conhecimento
-      const MAX_CONTEXT_TOKENS = TOTAL_CONTEXT_WINDOW - systemPromptTokens - SAFETY_MARGIN;
+
+      // LIMITE FIXO APENAS PARA O CONTEXTO DOS CHUNKS: 2000 tokens
+      // Prompt do sistema e pergunta do usuário NÃO TÊM LIMITAÇÃO
+      const MAX_CONTEXT_TOKENS = 2000;
 
       // Estatísticas para monitoramento
       const resourceCount = new Map();
@@ -602,16 +656,35 @@ export const findRelevantContent = async (userQuery: string) => {
         }
       }
 
-      // Log detalhado para produção incluindo informações do prompt
-      console.log('📊 Retrieval Dinâmico:', {
-        promptTokens: systemPromptTokens,
+      // Log detalhado para produção com debug de busca
+      console.log('📊 Retrieval Otimizado (Contexto Limitado):', {
+        queryOriginal: userQuery,
+        queryNormalizada: normalizedQuery,
+        resultadosSemanticos: similarContent.length,
+        resultadosKeywords: keywordContent.length,
+        resultadosCombinados: finalContent.length,
+        resultadosAposQualidade: filteredByQuality.length,
         contextTokensUsed: totalTokens,
-        contextTokensAvailable: MAX_CONTEXT_TOKENS,
-        totalBudget: TOTAL_CONTEXT_WINDOW,
-        safetyMargin: SAFETY_MARGIN,
+        contextTokensLimit: MAX_CONTEXT_TOKENS,
         chunks: processedResults.length,
-        fontes: resourceCount.size
+        fontes: resourceCount.size,
+        threshold: 0.15,
+        observacao: 'Prompt sistema e pergunta usuário SEM limitação',
       });
+
+      // Log de debug das similaridades encontradas
+      if (finalContent.length > 0) {
+        console.log('🔍 [DEBUG] Top 3 resultados combinados por similaridade:');
+        finalContent.slice(0, 3).forEach((item, index) => {
+          console.log(
+            `   ${index + 1}. Similaridade: ${(item.similarity * 100).toFixed(2)}% | Conteúdo: ${item.content.substring(0, 100)}...`,
+          );
+        });
+      } else {
+        console.log(
+          '⚠️ [DEBUG] Nenhum resultado encontrado (semântico + keywords)',
+        );
+      }
 
       return processedResults;
     } catch (embeddingError: unknown) {

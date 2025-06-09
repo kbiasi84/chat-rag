@@ -13,24 +13,25 @@ interface SuggestedActionsProps {
 function PureSuggestedActions({ chatId, append }: SuggestedActionsProps) {
   const suggestedActions = [
     {
-      title: 'Quais são os direitos',
-      label: 'nas férias do colaborador?',
-      action: 'Quais são os direitos nas férias do colaborador?',
+      title: 'O Neto pode ser',
+      label: 'dependente dos avós no imposto de renda?',
+      action: 'O Neto pode ser dependente dos avós no imposto de renda?',
     },
     {
-      title: 'Como calcular',
-      label: 'rescisão por justa causa?',
-      action: 'Como calcular rescisão por justa causa?',
+      title: 'Quais os direitos do funcionário',
+      label: 'na rescisão por justa causa?',
+      action: 'Quais os direitos do funcionário na rescisão por justa causa?',
     },
     {
-      title: 'Explique o processo',
-      label: 'de admissão de funcionários',
-      action: 'Explique o processo de admissão de funcionários',
+      title: 'O evento de admissão do funcionário',
+      label: 'no eSocial deve ser enviado quando?',
+      action:
+        'O evento de admissão do funcionário no eSocial deve ser enviado quando?',
     },
     {
-      title: 'Quais são as obrigações',
-      label: 'do eSocial para empresas?',
-      action: 'Quais são as obrigações do eSocial para empresas?',
+      title: 'Como fazer o lanaçmento contábil',
+      label: 'de um veículo ou imóvel?',
+      action: 'Como fazer o lanaçmento contábil de um veículo ou imóvel?',
     },
   ];
 
